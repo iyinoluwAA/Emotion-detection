@@ -1,0 +1,41 @@
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+app/__pycache__
+
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and runtime
+logs/
+*.log
+predictions_log.csv
+
+# Data & models (do not commit large dataset/model by default)
+data/
+models/*.h5
+models/*.keras
+
+# Secrets
+.kaggle/
+kaggle.json
+.env
+.env.* 
+
+# Others
+*.zip
+*.tar.gz
