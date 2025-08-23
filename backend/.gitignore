@@ -39,3 +39,10 @@ kaggle.json
 # Others
 *.zip
 *.tar.gz
+# ignore SQLite DB and tmp uploads
+predictions.db
+predictions_log.csv
+tmp/
+.pytest_cache/
+
+test.py

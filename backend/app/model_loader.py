@@ -1,21 +1,55 @@
 import os
-from pathlib import Path
+import json
 from tensorflow.keras.models import load_model
 
 # Predefined emotion labels (must match training order)
-EMOTION_LABELS = ['angry', 'disgust', 'fear', 'happy', 'neutral', 'sad', 'surprise']
+DEFAULT_LABELS = ['angry', 'disgust', 'fear', 'happy', 'neutral', 'sad', 'surprise']
 
 
-def load_emotion_model(model_filename='emotion_model.keras'):
+def load_emotion_model():
     """
-    Loads the trained Keras model using an absolute path and returns model + labels.
+    Returns: (model, labels, model_version)
+    -model: Keras model or None
+    -labels: list or dict mapping indices
+    -model_version: string
     """
-    # Determine base project directory (parent of 'app')
-    base_dir = Path(__file__).resolve().parent.parent
-    model_path = base_dir / 'models' / model_filename
+    models_dir = os.path.join(os.getcwd(), "models")
+    # try .keras then .h5
+    model_paths = [
+        os.path.join(models_dir, "emotion_model.keras"),
+        os.path.join(models_dir, "emotion_model.h5"),
+        os.path.join(models_dir, "emotion_model.hdf5")
+    ]
+    model_path = None
+    for p in model_paths:
+        if os.path.exists(p):
+            model_path = p
+            break
+    
+    if model_path is None:
+        raise FileNotFoundError("No model file found in models/. please add emotion_model.keras or emotion_model.h5")
 
-    if not model_path.exists():
-        raise FileNotFoundError(f"Model file not found: {model_path}")
-
-    model = load_model(str(model_path))
-    return model, EMOTION_LABELS
+    model = load_model(model_path)
+    
+    # load labels.json if present
+    labels_path = os.path.join(models_dir, "labels.json")
+    labels = DEFAULT_LABELS
+    if os.path.exists(labels_path):
+        try:
+            with open(labels_path, "r", encoding="utf-8") as f:
+                labels = json.load(f)
+        except Exception:
+            pass
+    
+    # model version metadata
+    version_path = os.path.join(models_dir, "MODEL_VERSION.txt")
+    version = "v_unknown"
+    if os.path.exists(version_path):
+        try:
+            with open(version_path, "r", encoding="uft-8") as f:
+                version = f.read().strip()
+        except Exception:
+            pass
+    
+    return model, labels, version
+    
