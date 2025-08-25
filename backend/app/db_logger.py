@@ -1,4 +1,4 @@
-# app/db_logger.py
+
 import sqlite3
 import os
 import datetime
@@ -35,7 +35,7 @@ def log_prediction(db_path: str, filename: str, emotion: str, confidence: float)
     """
     # Defensive conversions
     try:
-        ts = datetime.datetime.utcnow().isoformat()
+        ts = datetime.datetime.now(datetime.UTC).isoformat()
     except Exception:
         # fallback to str(datetime)
         ts = str(datetime.datetime.utcnow())

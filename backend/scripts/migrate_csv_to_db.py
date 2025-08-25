@@ -1,4 +1,4 @@
-# scripts/migrate_csv_to_db.py
+
 import os
 import csv
 import sys

@@ -3,8 +3,9 @@ import os
 import datetime
 import csv
 import traceback
+import logging
 
-from flask import Flask, request, jsonify, current_app
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -35,7 +36,7 @@ if not os.path.exists(LOG_CSV):
             writer = csv.writer(f)
             writer.writerow(["timestamp", "filename", "emotion", "confidence"])
     except Exception:
-        # Non-fatal — just log if we had a logger, but module-level import should be light.
+        # Non-fatal — keep module import light.
         pass
 
 
@@ -48,11 +49,6 @@ def create_app(config: dict | None = None):
     Heavy imports (model loading, db init) are performed inside this factory
     so importing modules from scripts/tests doesn't trigger expensive work.
     """
-    # Local (deferred) imports — avoid import-time side effects
-    from .model_loader import load_emotion_model
-    from .db_logger import init_db, log_prediction, get_metrics, tail_rows
-    from .utils import preprocess_face
-
     # Merge defaults with provided config
     cfg = DEFAULTS.copy()
     if config:
@@ -60,6 +56,34 @@ def create_app(config: dict | None = None):
 
     app = Flask(__name__)
     CORS(app)  # you can restrict origins: CORS(app, origins=[...])
+
+    # ---------- file logging setup (after app created) ----------
+    LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+    except Exception:
+        # If logs dir cannot be created, continue; app.logger will still work to stdout
+        pass
+
+    log_path = os.path.join(LOG_DIR, "app.log")
+    try:
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setLevel(logging.INFO)  # change to ERROR if you prefer
+        formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(module)s: %(message)s")
+        file_handler.setFormatter(formatter)
+
+        # avoid adding duplicate handlers when reloading
+        abs_log_path = os.path.abspath(log_path)
+        if not any(
+            isinstance(h, logging.FileHandler) and getattr(h, "baseFilename", None) == abs_log_path
+            for h in app.logger.handlers
+        ):
+            app.logger.addHandler(file_handler)
+            # set app logger level (don't lower if already configured higher)
+            app.logger.setLevel(logging.INFO)
+    except Exception:
+        # If logging can't be configured, keep going — logger will fallback to default handlers.
+        app.logger.exception("Failed to configure file logging")
 
     # Apply config to app
     app.config["MAX_CONTENT_LENGTH"] = cfg["MAX_FILE_SIZE"]
@@ -69,6 +93,11 @@ def create_app(config: dict | None = None):
 
     # Ensure tmp directory exists (again, per app)
     os.makedirs(app.config["TMP_DIR"], exist_ok=True)
+
+    # Local (deferred) imports — avoid import-time side effects
+    from .model_loader import load_emotion_model
+    from .db_logger import init_db, log_prediction, get_metrics, tail_rows
+    from .utils import preprocess_face
 
     # Initialize DB
     try:
@@ -122,7 +151,7 @@ def create_app(config: dict | None = None):
     def index():
         return jsonify({"status": "ok", "message": "Flask backend running"}), 200
 
-    @app.route("/health")
+    @app.route("/health", methods=["GET"])
     def health():
         model_loaded = bool(app.config.get("MODEL"))
         labels_obj = app.config.get("LABELS")
@@ -145,6 +174,29 @@ def create_app(config: dict | None = None):
         except Exception as exc:
             app.logger.exception("Failed to fetch metrics")
             return jsonify({"error": "Failed to fetch metrics", "details": str(exc)}), 500
+
+    @app.route("/logs", methods=["GET"])
+    def logs():
+        try:
+            limit = int(request.args.get("limit", 20))
+            limit = max(1, min(200, limit))  # clamp
+            rows = tail_rows(DB_PATH, limit=limit)  # tail_rows returns list of tuples
+            # convert to list of dicts (id, ts, filename, emotion, confidence)
+            result = []
+            for r in rows:
+                if len(r) == 4:
+                    ts, filename, emotion, confidence = r
+                    record = {"ts": ts, "filename": filename, "emotion": emotion, "confidence": confidence}
+                elif len(r) == 5:
+                    _id, ts, filename, emotion, confidence = r
+                    record = {"id": _id, "ts": ts, "filename": filename, "emotion": emotion, "confidence": confidence}
+                else:
+                    record = {"row": r}
+                result.append(record)
+            return jsonify({"ok": True, "logs": result}), 200
+        except Exception as exc:
+            app.logger.exception("Failed to fetch logs")
+            return jsonify({"error": "failed", "detail": str(exc)}), 500
 
     @app.route("/detect", methods=["POST"])
     def detect():
@@ -293,4 +345,3 @@ def create_app(config: dict | None = None):
                 app.logger.exception("failed removing tmp file")
 
     return app
-
