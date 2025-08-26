@@ -16,7 +16,7 @@ type LogRecord = {
 
 const DEFAULT_API = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
-export default function App(): JSX.Element {
+export default function App() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [streaming, setStreaming] = useState(false);
@@ -39,14 +39,17 @@ export default function App(): JSX.Element {
     setError(null);
     try {
       const res = await fetch(`${apiBase}/logs?limit=${limit}`);
-      if (!res.ok) throw new Error(`Status ${res.status}`);
-      const json = await res.json();
-      setLogs(json.logs || []);
-    } catch (e: any) {
-      console.warn("Failed fetching logs:", e);
-      setError("Failed fetching logs (check backend URL).");
-    }
-  }
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+          const json = await res.json();
+          setLogs(json.logs || []);
+          } catch (e: unknown) {
+            if (e instanceof Error) {
+              console.warn("Failed fetching logs:", e.message);
+            } else {
+              console.warn("Failed fetching logs:", e);
+            }
+            setError("Failed fetching logs (check backend URL).");
+          }
 
   async function startCamera() {
     setError(null);
