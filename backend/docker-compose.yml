@@ -1,9 +1,0 @@
-services:
-  backend:
-    build: .
-    ports:
-      - "5001:5000"    # <- change host port to 5001
-    volumes:
-      - ./:/app
-    environment:
-      - FLASK_ENV=development
