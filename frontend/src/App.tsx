@@ -1,4 +1,4 @@
-// src/App.tsx
+
 import React, { useEffect, useRef, useState } from "react";
 
 type Prediction = {
