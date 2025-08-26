@@ -2,17 +2,17 @@
 Flask==3.1.1
 flask-cors==4.0.0
 
-# ML stack
-tensorflow==2.20.0
-numpy>=1.26.0,<2.2.0
+# ML stack (pin numpy for TensorFlow + OpenCV compatibility)
+tensorflow-cpu==2.20.0
+numpy>=1.26.0,<2.0
 h5py>=3.7.0
 
 # Image IO / preprocessing
 Pillow>=9.0.0
-opencv-python-headless==4.7.0.72
+opencv-python-headless==4.9.0.80
 
 # Utilities for testing / batch scripts
 requests>=2.28.0
 
 # (Optional) for production WSGI
-gunicorn>=20.1.0
+gunicorn>=21.2.0
