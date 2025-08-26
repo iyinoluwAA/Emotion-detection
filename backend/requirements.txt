@@ -2,7 +2,7 @@
 Flask==3.1.1
 flask-cors==4.0.0
 
-# ML stack (pin numpy for TensorFlow + OpenCV compatibility)
+# ML stack
 tensorflow-cpu==2.20.0
 numpy>=1.26.0,<2.0
 h5py>=3.7.0
