@@ -1,0 +1,56 @@
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+app/__pycache__
+*.py[cod]
+
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and runtime
+logs/
+*.log
+predictions_log.csv
+
+# Data & models (do not commit large dataset/model by default)
+data/
+models/*.h5
+models/*.keras
+
+# Secrets
+.kaggle/
+kaggle.json
+.env
+.env.* 
+
+# Others
+*.zip
+*.tar.gz
+# ignore SQLite DB and tmp uploads
+predictions.db
+predictions_log.csv
+tmp/
+.pytest_cache/
+
+# logs and databases
+backend/logs/
+backend/predictions.db
+backend/models/
+*.keras
+*.h5
+
+test.py

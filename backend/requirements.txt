@@ -1,0 +1,18 @@
+# Web framework + CORS
+Flask==3.1.1
+flask-cors==4.0.0
+
+# ML stack
+tensorflow==2.19.0
+numpy>=1.26.0,<2.2.0
+h5py>=3.7.0
+
+# Image IO / preprocessing
+Pillow>=9.0.0
+opencv-python-headless==4.7.0.72
+
+# Utilities for testing / batch scripts
+requests>=2.28.0
+
+# (Optional) for production WSGI
+gunicorn>=20.1.0
