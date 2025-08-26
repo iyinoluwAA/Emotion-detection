@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 
 type Prediction = {
@@ -14,7 +13,7 @@ type LogRecord = {
   confidence?: number;
 };
 
-const DEFAULT_API = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 export default function App() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -26,36 +25,30 @@ export default function App() {
   const [logs, setLogs] = useState<LogRecord[]>([]);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
 
-  // runtime-configurable backend base (editable in UI)
-  const [apiBase, setApiBase] = useState<string>(DEFAULT_API);
-  const [backendInput, setBackendInput] = useState<string>("");
-
   useEffect(() => {
     fetchLogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchLogs(limit = 8) {
     setError(null);
     try {
-      const res = await fetch(`${apiBase}/logs?limit=${limit}`);
-        if (!res.ok) throw new Error(`Status ${res.status}`);
-          const json = await res.json();
-          setLogs(json.logs || []);
-          } catch (e: unknown) {
-            if (e instanceof Error) {
-              console.warn("Failed fetching logs:", e.message);
-            } else {
-              console.warn("Failed fetching logs:", e);
-            }
-            setError("Failed fetching logs (check backend URL).");
-          }
+      const res = await fetch(`${API_BASE}/logs?limit=${limit}`);
+      if (!res.ok) throw new Error(`Status ${res.status}`);
+      const json = await res.json();
+      setLogs(json.logs || []);
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        console.warn("Failed fetching logs:", e.message);
+      } else {
+        console.warn("Failed fetching logs:", e);
+      }
+      setError("Failed fetching logs (check backend URL).");
+    }
   }
 
   async function startCamera() {
     setError(null);
     try {
-      // small camera constraints (reduce resolution for performance)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 480 }, height: { ideal: 360 }, facingMode: "user" },
         audio: false,
@@ -85,7 +78,6 @@ export default function App() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return null;
-    // use smaller capture size to reduce upload and processing time
     const w = Math.min(480, video.videoWidth || 480);
     const h = Math.min(360, video.videoHeight || 360);
     canvas.width = w;
@@ -95,7 +87,7 @@ export default function App() {
     ctx.drawImage(video, 0, 0, w, h);
     return new Promise<Blob | null>((resolve) => {
       canvas.toBlob((b) => resolve(b ?? null), "image/jpeg", 0.85);
-    }) as unknown as Blob; // cast: we immediately return a blob in submitFile flow
+    }) as unknown as Blob;
   }
 
   async function submitFile(file: Blob, filename = "capture.jpg") {
@@ -107,7 +99,7 @@ export default function App() {
       const form = new FormData();
       form.append("image", file, filename);
 
-      const res = await fetch(`${apiBase}/detect`, {
+      const res = await fetch(`${API_BASE}/detect`, {
         method: "POST",
         body: form,
       });
@@ -121,7 +113,6 @@ export default function App() {
       const data = await res.json();
       setPrediction({ emotion: data.emotion, confidence: data.confidence });
 
-      // refresh logs
       fetchLogs();
     } catch (e) {
       console.error(e);
@@ -140,15 +131,12 @@ export default function App() {
 
   async function onCaptureClick() {
     const blob = captureFrame();
-    // captureFrame above returns a Blob via toBlob - if it's a Promise in your environment,
-    // guard for that (older TS signatures). Let's cover both cases:
     try {
       const b = blob as unknown;
       if (b instanceof Blob) {
         await submitFile(b, "capture.jpg");
         return;
       }
-      // If promise-like:
       const resolved = await (blob as unknown as Promise<Blob | null>);
       if (!resolved) {
         setError("Failed capturing frame");
@@ -165,48 +153,23 @@ export default function App() {
     setLogs([]);
   }
 
-  // use the backend input (applies as runtime override)
-  function applyBackendUrl() {
-    const trimmed = backendInput.trim();
-    if (trimmed) {
-      setApiBase(trimmed);
-      setBackendInput("");
-      setError(null);
-      fetchLogs();
-    }
-  }
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 p-6">
       <div className="mx-auto max-w-3xl">
-        <header className="flex items-start justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-semibold">Emotion Detector — Frontend (MVP)</h1>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              aria-label="Backend URL"
-              className="px-2 py-1 border rounded text-sm"
-              placeholder="override backend URL (https://...)"
-              value={backendInput}
-              onChange={(e) => setBackendInput(e.target.value)}
-            />
-            <button className="btn" onClick={applyBackendUrl} disabled={!backendInput.trim()}>
-              Apply
-            </button>
-          </div>
+        <header className="flex justify-center mb-4">
+          <h1 className="text-2xl font-semibold">Emotion Detection</h1>
         </header>
 
         <main className="bg-white p-4 rounded-lg shadow">
           <div className="flex flex-col items-center gap-4">
-            {/* centered small camera on top */}
+            {/* Camera */}
             <div className="w-80 h-60 bg-black rounded overflow-hidden flex items-center justify-center">
               <video ref={videoRef} className="w-full h-full object-cover" muted />
               <canvas ref={canvasRef} className="hidden" />
               {!streaming && <div className="text-sm text-white">Camera inactive</div>}
             </div>
 
-            {/* buttons under the camera */}
+            {/* Buttons */}
             <div className="flex gap-2">
               {!streaming ? (
                 <button className="btn" onClick={startCamera}>
@@ -245,7 +208,7 @@ export default function App() {
               </div>
             )}
 
-            {/* logs under everything */}
+            {/* Logs */}
             <section className="w-full mt-4">
               <h3 className="font-medium mb-2">Recent predictions</h3>
               <div className="max-h-64 overflow-auto border rounded p-2 space-y-2 bg-slate-50">
