@@ -1,3 +1,4 @@
+// src/App.tsx
 import React, { useEffect, useRef, useState } from "react";
 
 type Prediction = {
@@ -13,7 +14,7 @@ type LogRecord = {
   confidence?: number;
 };
 
-const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const DEFAULT_API = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 export default function App(): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -24,42 +25,37 @@ export default function App(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogRecord[]>([]);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
-  const [apiBase, setApiBase] = useState<string>(() => {
-    return localStorage.getItem("VITE_API_URL") || DEFAULT_API_BASE;
-  });
-  const [backendInput, setBackendInput] = useState<string>(apiBase);
+
+  // runtime-configurable backend base (editable in UI)
+  const [apiBase, setApiBase] = useState<string>(DEFAULT_API);
+  const [backendInput, setBackendInput] = useState<string>("");
 
   useEffect(() => {
-    // fetch recent logs on mount
     fetchLogs();
-    // attempt to stop camera when unmounting
-    return () => {
-      stopCamera();
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchLogs(limit = 8) {
+    setError(null);
     try {
       const res = await fetch(`${apiBase}/logs?limit=${limit}`);
       if (!res.ok) throw new Error(`Status ${res.status}`);
       const json = await res.json();
       setLogs(json.logs || []);
-    } catch (e) {
-      // non-fatal
+    } catch (e: any) {
       console.warn("Failed fetching logs:", e);
+      setError("Failed fetching logs (check backend URL).");
     }
   }
 
   async function startCamera() {
     setError(null);
     try {
-      // smaller constraints to reduce camera "pop up" size and CPU usage
-      const constraints: MediaStreamConstraints = {
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+      // small camera constraints (reduce resolution for performance)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 480 }, height: { ideal: 360 }, facingMode: "user" },
         audio: false,
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
@@ -85,23 +81,17 @@ export default function App(): JSX.Element {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return null;
-
-    // smaller capture size for performance (scale down)
-    const targetWidth = 320;
-    const aspect = video.videoHeight / video.videoWidth || 0.75;
-    const targetHeight = Math.round(targetWidth * aspect || 240);
-
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
+    // use smaller capture size to reduce upload and processing time
+    const w = Math.min(480, video.videoWidth || 480);
+    const h = Math.min(360, video.videoHeight || 360);
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-    const binary = atob(dataUrl.split(",")[1]);
-    const array = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
-    return new Blob([array.buffer], { type: "image/jpeg" });
+    ctx.drawImage(video, 0, 0, w, h);
+    return new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b ?? null), "image/jpeg", 0.85);
+    }) as unknown as Blob; // cast: we immediately return a blob in submitFile flow
   }
 
   async function submitFile(file: Blob, filename = "capture.jpg") {
@@ -119,7 +109,7 @@ export default function App(): JSX.Element {
       });
 
       if (!res.ok) {
-        const txt = await res.text();
+        const txt = await res.text().catch(() => "");
         setError(`Server error ${res.status}: ${txt}`);
         return;
       }
@@ -146,67 +136,86 @@ export default function App(): JSX.Element {
 
   async function onCaptureClick() {
     const blob = captureFrame();
-    if (!blob) {
-      setError("Failed capturing frame");
-      return;
+    // captureFrame above returns a Blob via toBlob - if it's a Promise in your environment,
+    // guard for that (older TS signatures). Let's cover both cases:
+    try {
+      const b = blob as unknown;
+      if (b instanceof Blob) {
+        await submitFile(b, "capture.jpg");
+        return;
+      }
+      // If promise-like:
+      const resolved = await (blob as unknown as Promise<Blob | null>);
+      if (!resolved) {
+        setError("Failed capturing frame");
+        return;
+      }
+      await submitFile(resolved, "capture.jpg");
+    } catch (ex) {
+      console.error(ex);
+      setError("Failed capturing frame.");
     }
-    await submitFile(blob, "capture.jpg");
   }
 
-  function clearLogsUI() {
+  function clearLogsView() {
     setLogs([]);
   }
 
+  // use the backend input (applies as runtime override)
   function applyBackendUrl() {
     const trimmed = backendInput.trim();
-    if (!trimmed) return;
-    setApiBase(trimmed);
-    localStorage.setItem("VITE_API_URL", trimmed);
-    // refresh logs from new backend
-    setTimeout(() => fetchLogs(), 250);
+    if (trimmed) {
+      setApiBase(trimmed);
+      setBackendInput("");
+      setError(null);
+      fetchLogs();
+    }
   }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 p-6">
       <div className="mx-auto max-w-3xl">
-        <header className="flex items-center justify- mb-6">
-          <h1 className="text-2xl font-semibold">Emotion Detection</h1>
+        <header className="flex items-start justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-semibold">Emotion Detector — Frontend (MVP)</h1>
+          </div>
 
+          <div className="flex items-center gap-2">
+            <input
+              aria-label="Backend URL"
+              className="px-2 py-1 border rounded text-sm"
+              placeholder="override backend URL (https://...)"
+              value={backendInput}
+              onChange={(e) => setBackendInput(e.target.value)}
+            />
+            <button className="btn" onClick={applyBackendUrl} disabled={!backendInput.trim()}>
+              Apply
+            </button>
+          </div>
         </header>
 
-        <main className="bg-white p-6 rounded-lg shadow">
-          {/* CAMERA (centered top) */}
+        <main className="bg-white p-4 rounded-lg shadow">
           <div className="flex flex-col items-center gap-4">
-            <div className="rounded-lg bg-black overflow-hidden w-[360px] h-[270px] flex items-center justify-center">
-              {/* compact video */}
-              <video
-                ref={videoRef}
-                className="w-full h-full object-cover"
-                muted
-                playsInline
-                aria-label="Camera preview"
-              />
+            {/* centered small camera on top */}
+            <div className="w-80 h-60 bg-black rounded overflow-hidden flex items-center justify-center">
+              <video ref={videoRef} className="w-full h-full object-cover" muted />
+              <canvas ref={canvasRef} className="hidden" />
+              {!streaming && <div className="text-sm text-white">Camera inactive</div>}
             </div>
 
-            {/* Buttons under camera — centered */}
-            <div className="flex flex-wrap items-center justify-center gap-3">
+            {/* buttons under the camera */}
+            <div className="flex gap-2">
               {!streaming ? (
-                <button className="btn" onClick={startCamera} aria-label="Start camera">
+                <button className="btn" onClick={startCamera}>
                   Start camera
                 </button>
               ) : (
-                <button className="btn-outline" onClick={stopCamera} aria-label="Stop camera">
+                <button className="btn" onClick={stopCamera}>
                   Stop camera
                 </button>
               )}
 
-              <button
-                className="btn"
-                onClick={onCaptureClick}
-                disabled={!streaming || loading}
-                aria-disabled={!streaming || loading}
-                title={!streaming ? "Start camera first" : "Capture current frame and predict"}
-              >
+              <button className="btn" onClick={onCaptureClick} disabled={!streaming || loading}>
                 {loading ? "Predicting…" : "Capture & Predict"}
               </button>
 
@@ -215,67 +224,58 @@ export default function App(): JSX.Element {
                 <input type="file" accept="image/*" className="hidden" onChange={onUpload} />
               </label>
 
-              <button className="btn-ghost" onClick={() => fetchLogs(8)}>
-                Refresh logs
-              </button>
-
-              <button className="btn-danger" onClick={clearLogsUI}>
+              <button className="btn" onClick={clearLogsView}>
                 Clear logs
               </button>
             </div>
 
-            {/* small helper row: selected file / errors / prediction */}
-            <div className="w-full text-center">
-              {selectedFileName && <div className="text-sm text-slate-600">Selected: {selectedFileName}</div>}
-              {error && <div className="mt-2 text-red-600">{error}</div>}
-              {prediction && (
-                <div className="mt-3 inline-block p-3 rounded-md bg-green-50 border border-green-100 text-left">
-                  <div className="text-lg font-semibold">{prediction.emotion}</div>
-                  <div className="text-sm text-slate-600">
-                    Confidence: {(prediction.confidence * 100).toFixed(1)}%
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+            {selectedFileName && <div className="text-sm text-slate-600">Selected: {selectedFileName}</div>}
 
-          {/* Backend URL and logs area */}
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Left: logs */}
-            <section className="bg-slate-50 p-4 rounded border">
-              <h3 className="font-medium mb-3">Recent predictions</h3>
-              <div className="space-y-2 max-h-64 overflow-auto pr-2">
+            {error && <div className="mt-1 text-red-600">{error}</div>}
+
+            {prediction && (
+              <div className="mt-2 p-3 rounded-md bg-green-50 border border-green-100 w-full text-center">
+                <div className="text-lg font-semibold">{prediction.emotion}</div>
+                <div className="text-sm text-slate-600">
+                  Confidence: {(prediction.confidence * 100).toFixed(1)}%
+                </div>
+              </div>
+            )}
+
+            {/* logs under everything */}
+            <section className="w-full mt-4">
+              <h3 className="font-medium mb-2">Recent predictions</h3>
+              <div className="max-h-64 overflow-auto border rounded p-2 space-y-2 bg-slate-50">
                 {logs.length === 0 && <div className="text-sm text-slate-500">No recent logs</div>}
                 {logs.map((r, idx) => (
-                  <div key={idx} className="text-sm border-b pb-2">
+                  <div key={idx} className="text-sm bg-white p-2 rounded shadow-sm">
                     <div className="flex justify-between">
-                      <div className="text-slate-700 font-medium">{r.emotion}</div>
+                      <div className="text-slate-700">{r.emotion}</div>
                       <div className="text-slate-500">
                         {r.confidence ? (r.confidence * 100).toFixed(1) + "%" : "-"}
                       </div>
                     </div>
                     <div className="text-xs text-slate-400">
-                      {r.ts ? new Date(r.ts).toLocaleString() : r.filename}
+                      {r.ts ? new Date(r.ts).toLocaleString() : ""}
                     </div>
                   </div>
                 ))}
               </div>
+              <div className="mt-3 flex gap-2">
+                <button className="btn" onClick={() => fetchLogs(8)}>
+                  Refresh
+                </button>
+                <button className="btn" onClick={() => fetchLogs(20)}>
+                  Load 20
+                </button>
+              </div>
             </section>
-
           </div>
         </main>
       </div>
 
-      {/* hidden canvas used for capture */}
-      <canvas ref={canvasRef} className="hidden" />
-
       <style>{`
-        /* tiny utility styles using Tailwind @apply not available here, so use classes mostly */
-        .btn{ @apply inline-flex items-center gap-2 px-3 py-2 rounded bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-60; }
-        .btn-outline{ @apply inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-300 text-slate-700 bg-white hover:bg-slate-50; }
-        .btn-ghost{ @apply inline-flex items-center gap-2 px-3 py-2 rounded text-slate-600 hover:text-slate-800; }
-        .btn-danger{ @apply inline-flex items-center gap-2 px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700; }
-        .input{ @apply w-full rounded border px-3 py-2 bg-white border-slate-300 }
+        .btn{ @apply inline-flex items-center gap-2 px-3 py-2 rounded bg-sky-600 text-white hover:bg-sky-700; }
       `}</style>
     </div>
   );
