@@ -4,7 +4,6 @@ flask-cors==4.0.0
 
 # ML stack (cpu)
 tensorflow-cpu==2.20.0
-numpy==1.26.4
 h5py>=3.7.0
 
 # Image IO / preprocessing
