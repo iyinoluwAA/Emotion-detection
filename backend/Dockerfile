@@ -1,40 +1,35 @@
 # backend/Dockerfile
-FROM python:3.11-slim
-
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+FROM tensorflow/tensorflow:2.20.0
 
 WORKDIR /app
 
-# system deps required for opencv & downloading (curl)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libgl1 \
-    libglib2.0-0 \
-    curl \
-    ca-certificates \
+# system deps (opencv needs libgl / libglib) and curl for entrypoint download
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+       libgl1 \
+       libglib2.0-0 \
+       curl \
   && rm -rf /var/lib/apt/lists/*
 
-# copy only what's needed for pip first (speeds layer cache)
+# copy only requirements first (small)
 COPY requirements.txt /app/requirements.txt
 
-# upgrade pip
-RUN python -m pip install --upgrade pip setuptools wheel
+# create a requirements file that excludes tensorflow/tensorflow-cpu lines
+# (we already have TensorFlow in the base image, so skip installing it)
+RUN sed -n '/^tensorflow/!p' /app/requirements.txt > /app/req_no_tf.txt
 
-# Install numpy first to avoid ABI mismatch (if you choose a pinned version)
-# If you want numpy pinned, uncomment:
-# RUN pip install --no-cache-dir numpy==1.26.4
+# upgrade pip, install rest of dependencies (no tensorflow)
+RUN python -m pip install --upgrade pip setuptools wheel \
+  && pip install --no-cache-dir -r /app/req_no_tf.txt
 
-# Install remaining deps
-RUN pip install --no-cache-dir -r /app/requirements.txt
-
-# copy app files
+# copy app code
 COPY . /app/
 
-# make scripts executable
-RUN chmod +x /app/scripts/download_model.sh /app/scripts/entrypoint.sh || true
+# copy entrypoint & make executable
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
-# Use entrypoint to run download at container start and then start gunicorn
-ENTRYPOINT ["/app/scripts/entrypoint.sh"]
-# default command (can be overridden in Render)
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "main:app", "--workers", "2", "--threads", "2", "--timeout", "60"]
+# port for local help; Render provides $PORT at runtime and entrypoint respects it
+EXPOSE 5000
+
+ENTRYPOINT ["/app/entrypoint.sh"]
