@@ -1,30 +1,16 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -euxo pipefail
 
-MODEL_DIR=/app/models
-MODEL_FILE="${MODEL_DIR}/emotion_model.keras"
-MODEL_URL="https://github.com/iyinoluwAA/Emotion-detection/releases/download/v1.0.0/emotion_model.keras"
-
-mkdir -p "${MODEL_DIR}"
-
-if [ -s "${MODEL_FILE}" ]; then
-  echo "Model already present: ${MODEL_FILE}"
+# allow override: if an env var SKIP_MODEL_DOWNLOAD is set, skip it
+if [ "${SKIP_MODEL_DOWNLOAD:-0}" != "1" ]; then
+  # run downloader; tolerate failure a limited number of times
+  /app/scripts/download_model.sh || {
+    echo "Warning: model download failed. Will attempt again at runtime (predict endpoints will fail until model exists)."
+  }
 else
-  echo "Model not found, attempting download to ${MODEL_FILE}"
-  # use curl with resume support and retries
-  if command -v curl >/dev/null 2>&1; then
-    curl --fail --location --retry 5 --retry-delay 2 --retry-max-time 60 --continue-at - -o "${MODEL_FILE}" "${MODEL_URL}" || {
-      echo "curl download failed"
-      exit 1
-    }
-  elif command -v wget >/dev/null 2>&1; then
-    wget -c -O "${MODEL_FILE}" "${MODEL_URL}" || { echo "wget download failed"; exit 1; }
-  else
-    echo "Error: neither curl nor wget are available in the container"
-    exit 1
-  fi
-  echo "Model downloaded."
+  echo "SKIP_MODEL_DOWNLOAD=1, skipping download script."
 fi
 
-# Exec the provided command (usually gunicorn)
+# exec the container's CMD (e.g. gunicorn main:app ...)
+# Using exec ensures signals are forwarded correctly.
 exec "$@"
