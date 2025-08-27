@@ -55,7 +55,7 @@ def create_app(config: dict | None = None):
         cfg.update(config)
 
     app = Flask(__name__)
-    CORS(app)  # you can restrict origins: CORS(app, origins=[...])
+    CORS(app, resources={r"/*": {"origins": "*"}})  # you can restrict origins: CORS(app, origins=[...])
 
     # ---------- file logging setup (after app created) ----------
     LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
