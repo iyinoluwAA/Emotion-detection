@@ -1,8 +1,12 @@
+# render.yaml (root)
 services:
-  - name: emotion-backend
-    type: web
+  - type: web
+    name: emotion-backend
     env: docker
-    region: oregon
-    branch: main
     dockerfilePath: backend/Dockerfile
+    branch: main
+    region: oregon
+    plan: free
     autoDeploy: true
+    buildCommand: ""      # leave blank for Docker builds on Render
+    startCommand: ""      # leave blank; CMD in Dockerfile used

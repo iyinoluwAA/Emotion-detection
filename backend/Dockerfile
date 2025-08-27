@@ -1,36 +1,80 @@
-# backend/Dockerfile — built for Render / local docker
+# backend/Dockerfile
 FROM python:3.11-slim
 
-# workdir
+# Workdir
 WORKDIR /app
 
-# Avoid cache problems, set TERM
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TERM=xterm
-
-# copy requirements first for layer caching
-COPY backend/requirements.txt /app/requirements.txt
-
-# install apt packages needed by OpenCV and common libs
+# Minimal system packages required by opencv/TensorFlow wheel building/execution
+# Keep packages small; we remove apt lists afterwards to reduce image size.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
+  && apt-get install -y --no-install-recommends \
       build-essential \
       libgl1 \
       libglib2.0-0 \
-      libsm6 \
-      libxrender1 \
-      libxext6 \
- && rm -rf /var/lib/apt/lists/*
+      curl \
+  && rm -rf /var/lib/apt/lists/*
 
-# upgrade pip and install wheels
-RUN python -m pip install --upgrade pip setuptools wheel
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Copy requirements file (Render will build Docker on their infra so this will be fetched from repo)
+COPY requirements.txt /app/requirements.txt
 
-# copy app code
-COPY backend/ /app/
+# Upgrade pip & install numpy first to avoid ABI mismatch with opencv/tensorflow compiled wheels
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir --default-timeout=60 --retries=5 numpy==1.26.4
 
-# expose port used by the app
+# Install the rest of the dependencies with slightly longer timeout & retries
+RUN pip install --no-cache-dir --default-timeout=60 --retries=5 -r /app/requirements.txt
+
+# Copy app code
+COPY . /app/
+
+# Make the runtime entrypoint executable
+COPY scripts/entrypoint.sh /app/scripts/entrypoint.sh
+RUN chmod +x /app/scripts/entrypoint.sh
+
+# Expose port used by app
 EXPOSE 5000
-ENV PORT=5000
 
-CMD ["gunicorn", "main:app", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "60"]
+# Use gunicorn as the process manager and our entrypoint wrapper
+# The entrypoint will ensure the model file exists (download if needed) and then exec gunicorn
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "main:app", "--workers", "2", "--threads", "2", "--timeout", "60"]
+# backend/Dockerfile
+FROM python:3.11-slim
+
+# Workdir
+WORKDIR /app
+
+# Minimal system packages required by opencv/TensorFlow wheel building/execution
+# Keep packages small; we remove apt lists afterwards to reduce image size.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+      build-essential \
+      libgl1 \
+      libglib2.0-0 \
+      curl \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements file (Render will build Docker on their infra so this will be fetched from repo)
+COPY requirements.txt /app/requirements.txt
+
+# Upgrade pip & install numpy first to avoid ABI mismatch with opencv/tensorflow compiled wheels
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir --default-timeout=60 --retries=5 numpy==1.26.4
+
+# Install the rest of the dependencies with slightly longer timeout & retries
+RUN pip install --no-cache-dir --default-timeout=60 --retries=5 -r /app/requirements.txt
+
+# Copy app code
+COPY . /app/
+
+# Make the runtime entrypoint executable
+COPY scripts/entrypoint.sh /app/scripts/entrypoint.sh
+RUN chmod +x /app/scripts/entrypoint.sh
+
+# Expose port used by app
+EXPOSE 5000
+
+# Use gunicorn as the process manager and our entrypoint wrapper
+# The entrypoint will ensure the model file exists (download if needed) and then exec gunicorn
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "main:app", "--workers", "2", "--threads", "2", "--timeout", "60"]
