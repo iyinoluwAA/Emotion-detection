@@ -13,7 +13,7 @@ type LogRecord = {
   confidence?: number;
 };
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const API_URL = import.meta.env.VITE_API_URL || "https://emotion-detection-1-8avi.onrender.com";
 
 export default function App() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -32,7 +32,7 @@ export default function App() {
   async function fetchLogs(limit = 8) {
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/logs?limit=${limit}`);
+      const res = await fetch(`${API_URL}/logs?limit=${limit}`);
       if (!res.ok) throw new Error(`Status ${res.status}`);
       const json = await res.json();
       setLogs(json.logs || []);
@@ -99,7 +99,7 @@ export default function App() {
       const form = new FormData();
       form.append("image", file, filename);
 
-      const res = await fetch(`${API_BASE}/detect`, {
+      const res = await fetch(`${API_URL}/detect`, {
         method: "POST",
         body: form,
       });
