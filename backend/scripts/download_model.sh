@@ -1,48 +1,36 @@
-    #!/usr/bin/env bash
-    set -euo pipefail
+#!/usr/bin/env bash
+set -eu
 
-    # Usage:
-    #   ./scripts/download_model.sh [DEST_PATH]
-    # or:
-    #   DEST=backend/models/emotion_model.keras ./scripts/download_model.sh
-    #
-    # Defaults to backend/models/emotion_model.keras
+MODEL_DIR="/app/backend/models"
+MODEL_FILE="${MODEL_DIR}/emotion_model.keras"
+MODEL_URL="https://github.com/iyinoluwAA/Emotion-detection/releases/download/v1.0.0/emotion_model.keras"
+RETRIES=6
+SLEEP=5
 
-    DEFAULT_DEST="backend/models/emotion_model.keras"
-    MODEL_URL="https://github.com/iyinoluwAA/Emotion-detection/releases/download/v1.0.0/emotion_model.keras"
+mkdir -p "$MODEL_DIR"
 
-    DEST="${DEST:-${1:-$DEFAULT_DEST}}"
-    DEST_DIR="$(dirname "$DEST")"
+if [ -f "$MODEL_FILE" ]; then
+  echo "Model already exists at $MODEL_FILE — skipping download."
+  exit 0
+fi
 
-    echo "Target model path: $DEST"
-    echo "Model URL: $MODEL_URL"
+echo "Downloading model to $MODEL_DIR from $MODEL_URL"
 
-    if [ -f "$DEST" ]; then
-    echo "Model already exists at $DEST — skipping download."
-    exit 0
-    fi
+download_with_curl() {
+  curl --fail --location --retry $RETRIES --retry-delay $SLEEP --retry-connrefused --show-error -o "$MODEL_FILE" "$MODEL_URL"
+}
 
-    # create parent dir
-    mkdir -p "$DEST_DIR"
+download_with_wget() {
+  wget --tries=$RETRIES --wait=$SLEEP --output-document="$MODEL_FILE" "$MODEL_URL"
+}
 
-    echo "Downloading model to $DEST_DIR ..."
-    if command -v curl >/dev/null 2>&1; then
-    curl -L --fail --retry 3 --retry-delay 2 "$MODEL_URL" -o "$DEST.part"
-    elif command -v wget >/dev/null 2>&1; then
-    wget -O "$DEST.part" "$MODEL_URL"
-    else
-    echo "Error: neither curl nor wget is installed." >&2
-    exit 2
-    fi
+if command -v curl >/dev/null 2>&1; then
+  download_with_curl || { echo "curl download failed"; rm -f "$MODEL_FILE"; exit 1; }
+elif command -v wget >/dev/null 2>&1; then
+  download_with_wget || { echo "wget download failed"; rm -f "$MODEL_FILE"; exit 1; }
+else
+  echo "Error: neither curl nor wget is available."
+  exit 1
+fi
 
-    # move into final name (only if download completed)
-    mv "$DEST.part" "$DEST"
-    echo "Download complete: $DEST"
-
-    # quick sanity check (file size > 0)
-    if [ ! -s "$DEST" ]; then
-    echo "Error: downloaded file is empty." >&2
-    exit 3
-    fi
-
-    echo "Done."
+echo "Download succeeded."

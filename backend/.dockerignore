@@ -22,3 +22,9 @@ backend/logs
 backend/predictions.db
 backend/models
 .git
+# ignore big and unnecessary files
+*.pyc
+node_modules
+frontend
+.vscode
+*.log
