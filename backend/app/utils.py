@@ -1,4 +1,3 @@
-
 import cv2
 import numpy as np
 
@@ -6,6 +5,9 @@ import numpy as np
 def preprocess_face(image_path, target_size=(48, 48)):
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
     img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError(f"Could not load image from path: {image_path}")
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
 
@@ -15,7 +17,12 @@ def preprocess_face(image_path, target_size=(48, 48)):
     x, y, w, h = faces[0]  # Just use the first detected face
     face = gray[y:y+h, x:x+w]
     face = cv2.resize(face, target_size)
-    face = face.astype('float32') / 255.0
+
+    # FIX: use np.float32 instead of string
+    face = face.astype(np.float32) / 255.0
+
+    # expand dims for model input (batch, height, width, channel)
     face = np.expand_dims(face, axis=-1)
     face = np.expand_dims(face, axis=0)
+
     return face, (x, y, w, h)
