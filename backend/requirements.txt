@@ -1,12 +1,11 @@
-# Web & CORS
 Flask==3.1.1
 flask-cors==4.0.0
 
-# small ML deps (no tensorflow, no numpy here)
+# ML helpers (no TF/numpy here)
 h5py>=3.7.0
 Pillow>=9.0.0
 opencv-python-headless==4.9.0.80
 
-# Utilities / production
+# utilities & production
 requests>=2.28.0
 gunicorn>=23.0.0
