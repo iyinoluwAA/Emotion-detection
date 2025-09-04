@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Grid, Container, Title, Space, Text } from "@mantine/core";
+import logo from "@/assets/Emotion-detection logo.png";
 
 import { CameraSpace } from "@/components/Camera/CameraSpace";
 import { TableReviews } from "@/components/TableReviews/TableReviews";
 import { StatsGrid } from "@/components/StatsGrid/StatsGrid";
 import { StatsRingCard } from "@/components/StatsRingCard/StatsRingCard";
-import { ActionToggle } from "@/components/ColorSchemeToggle/ActionToggle";
+import { uploadImage } from "@/api/client";
 
 type LogRowBackend = {
   id?: number;
@@ -54,7 +55,6 @@ export function HomePage() {
       setMetrics(json.metrics ?? null);
     } catch (err) {
       console.warn("fetchMetrics failed", err);
-      // non-fatal — keep whatever metrics state we had
     }
   }, []);
 
@@ -63,26 +63,14 @@ export function HomePage() {
     void fetchMetrics();
   }, [fetchLogs, fetchMetrics]);
 
-  // submitFile: send form-data to backend /detect
-  const submitFile = useCallback(
+  // robust submitFile (see next section snippet if you want only the function)
+    const submitFile = useCallback(
     async (file: Blob | File, filename = "upload.jpg") => {
-      const fd = new FormData();
-      fd.append("image", file, filename);
-
       try {
-        const res = await fetch(`${API_URL}/detect`, {
-          method: "POST",
-          body: fd,
-        });
-        if (!res.ok) {
-          const txt = await res.text().catch(() => "");
-          throw new Error(`Server ${res.status}: ${txt}`);
-        }
-        const json = await res.json();
+        const json = await uploadImage(API_URL, file, filename);
         return json;
       } finally {
-        // ALWAYS refresh logs and metrics after any attempt (success or failure).
-        // This ensures failed/low-confidence predictions appear immediately.
+        // ALWAYS refresh logs & metrics after attempt (success OR failure)
         try {
           await fetchLogs(20);
         } catch (err) {
@@ -100,10 +88,8 @@ export function HomePage() {
 
   const clearLogs = useCallback(() => {
     setLogs([]);
-    // optionally call backend endpoint to clear DB if you have one
   }, []);
 
-  // Map backend logs to TableReviews rows (simple mapping)
   const tableRows: TableRow[] = logs.map((l) => {
     const conf = typeof l.confidence === "number" ? Math.round((l.confidence ?? 0) * 100) : 0;
     return {
@@ -114,7 +100,6 @@ export function HomePage() {
     };
   });
 
-  // basic statsItems example from metrics (or fallback static)
   const statsItems =
     metrics && Object.keys(metrics.by_label || {}).length > 0
       ? Object.entries(metrics.by_label).map(([k, v]) => ({ title: k, value: String(v), diff: 0 }))
@@ -125,7 +110,6 @@ export function HomePage() {
           { title: "Active", value: "1", diff: 0 },
         ];
 
-  // ring breakdown example
   const ringBreakdown =
     metrics && metrics.by_label
       ? Object.entries(metrics.by_label).map(([label, count]) => ({ label, count: Number(count) }))
@@ -134,41 +118,35 @@ export function HomePage() {
   return (
     <Container size="xl" py="xl">
       <div style={{ textAlign: "center" }}>
+        <img src={logo} alt="Emotion Detection Logo" width={40} height={40} />
         <Title order={2}>Emotion Detection</Title>
       </div>
       <Space h="md" />
 
-      <Grid gutter="md">
+      {/* Grid with gutter for spacing */}
+      <Grid gutter="lg">
         {/* Left: Camera and controls */}
-        <Grid.Col span={{ base: 12, sm: 6 }}>
-          <CameraSpace
-            submitFile={submitFile}
-            onRefreshLogs={() => fetchLogs(8)}
-            onClearLogs={() => clearLogs()}
-          />
+        <Grid.Col span={12} >
+          <CameraSpace submitFile={submitFile} onRefreshLogs={() => fetchLogs(8)} onClearLogs={() => clearLogs()} />
           <Space h="md" />
           <Text size="sm" color="dimmed">
             {error ? `Error: ${error}` : loadingLogs ? "Loading logs..." : `Recent predictions: ${logs.length}`}
           </Text>
         </Grid.Col>
 
-        {/* Right: Stats */}
-        <Grid.Col span={{ base: 12, sm: 6 }}>
-          <StatsGrid items={statsItems} />
-          <Space h="md" />
-          <StatsRingCard
-            total={metrics?.total ?? logs.length}
-            completed={metrics?.by_label?.happy ?? 0}
-            breakdown={ringBreakdown}
-          />
+        {/* Right: Stats (stacked) */}
+        <Grid.Col span={12} >
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <StatsGrid items={statsItems} />
+            <StatsRingCard total={metrics?.total ?? logs.length} completed={metrics?.by_label?.happy ?? 0} breakdown={ringBreakdown} />
+          </div>
         </Grid.Col>
 
-        {/* Below: Table (only visible when tableRows.length > 0) */}
+        {/* Below: Table (full width) */}
         <Grid.Col span={12}>
           <TableReviews rows={tableRows} />
         </Grid.Col>
       </Grid>
-      <ActionToggle />
     </Container>
   );
 }
