@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Grid, Container, Title, Space, Text } from "@mantine/core";
 import logo from "@/assets/Emotion-detection logo.png";
 
+import { ActionToggle } from "@/components/ColorSchemeToggle/ActionToggle";
 import { CameraSpace } from "@/components/Camera/CameraSpace";
 import { TableReviews } from "@/components/TableReviews/TableReviews";
 import { StatsGrid } from "@/components/StatsGrid/StatsGrid";
@@ -147,6 +148,7 @@ export function HomePage() {
           <TableReviews rows={tableRows} />
         </Grid.Col>
       </Grid>
+      <ActionToggle />
     </Container>
   );
 }
