@@ -140,7 +140,7 @@ export function HomePage() {
 
       <Grid gutter="md">
         {/* Left: Camera and controls */}
-        <Grid.Col span={12} md={7}>
+        <Grid.Col span={{ base: 12, sm: 6 }}>
           <CameraSpace
             submitFile={submitFile}
             onRefreshLogs={() => fetchLogs(8)}
@@ -153,7 +153,7 @@ export function HomePage() {
         </Grid.Col>
 
         {/* Right: Stats */}
-        <Grid.Col span={12} md={5}>
+        <Grid.Col span={{ base: 12, sm: 6 }}>
           <StatsGrid items={statsItems} />
           <Space h="md" />
           <StatsRingCard
