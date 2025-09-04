@@ -1,0 +1,42 @@
+.wrapper {
+  display: inline-flex;
+  width: 44px;   /* visually similar to size="xl" */
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* both icons occupy the same space; animate opacity/transform */
+.icon {
+  width: 22px;
+  height: 22px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  transition: opacity 160ms ease, transform 160ms ease;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* default (light) shows sun */
+.wrapper[data-scheme="light"] .light {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.wrapper[data-scheme="light"] .dark {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.9);
+}
+
+/* dark scheme shows moon */
+.wrapper[data-scheme="dark"] .dark {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.wrapper[data-scheme="dark"] .light {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.9);
+}

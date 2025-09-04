@@ -1,0 +1,24 @@
+.button {
+  position: relative;
+  transition: background-color 150ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background-color: transparent;
+  z-index: 0;
+}
+
+.label {
+  position: relative;
+  z-index: 1;
+  font-weight: 600;
+}
+

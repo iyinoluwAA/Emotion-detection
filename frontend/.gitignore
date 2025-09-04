@@ -1,70 +1,142 @@
-# Node / package manager
-node_modules/
-.npm/
-.npmrc
+# -------------------------
+# Node / Frontend
+# -------------------------
+
+# Logs
+logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-.pnpm-debug.log
+lerna-debug.log*
+.pnpm-debug.log*
 
-# Build output
-dist/
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage / Testing
+coverage
+*.lcov
+.nyc_output
+
+# Build outputs
 build/
-.vite
+dist/
+out/
+.next
+.nuxt
+.vuepress/dist
+.temp
+.cache
+.parcel-cache
+.docusaurus
+.serverless/
 
-# Vite cache / temp
-/.vite
-/.cache
-/.parcel-cache
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+bower_components
 
 # TypeScript
 *.tsbuildinfo
 
-# Logs
-logs/
-*.log
+# Package manager caches
+.npm
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
 
-# Environment variables (keep examples in repo)
-.env
-.env.local
-.env.*.local
-!.env.example
+# Cache
+.eslintcache
+.stylelintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
 
-# Editor / OS junk
+# Misc
+.node_repl_history
+*.tgz
+.yarn-integrity
+
+# VSCode test storage
+.vscode-test
+
+# System junk
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# IDEs
+# -------------------------
+# Python / Backend
+# -------------------------
+
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.env
+.env.*
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Packaging
+*.egg
+*.egg-info/
+.eggs/
+*.manifest
+*.spec
+
+# Testing / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox
+.nox
+
+# Jupyter
+.ipynb_checkpoints
+
+# Logs / Temp
+*.log
+*.out
+*.tmp
+backend/logs/
+backend/uploads/
+backend/tmp/
+
+# Data / Models (large files not for git)
+*.h5
+*.hdf5
+*.keras
+*.pkl
+*.sqlite
+*.db
+*.csv
+*.tsv
+*.npz
+*.npy
+
+# -------------------------
+# IDE / Editor
+# -------------------------
 .vscode/
 .idea/
-*.sublime-workspace
-*.sublime-project
-
-# OS swap / temp
 *.swp
-*~
-*.tmp
-
-# Coverage
-coverage/
-coverage-final.json
-lcov-report/
-
-# Tests
-jest.config.*.local
-*.test.*.local
-
-# Lockfiles? (usually commit lockfiles for reproducible installs)
-# package-lock.json
-# yarn.lock
-# pnpm-lock.yaml
-
-# Docker / container
-docker-compose.override.yml
-.env.docker
-
-# Misc
-.env.*.secret
-secret-*.json
