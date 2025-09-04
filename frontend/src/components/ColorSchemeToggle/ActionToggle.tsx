@@ -19,7 +19,7 @@ export function ActionToggle() {
   };
 
   return (
-    <Group spacing="xs" position="left">
+    <Group gap="md" justify="left">
       <ActionIcon
         onClick={handleClick}
         variant="default"

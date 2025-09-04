@@ -33,11 +33,10 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs }: Props) {
       try {
         showNotification({ title: "Camera", message: "Unable to access camera. Check permissions.", color: "red" });
       } catch {
-        alert("Unable to access camera. Check permissions.");
-      }
+        // fallback
     }
   }
-
+}
   function stopCamera() {
     const v = videoRef.current;
     if (v && v.srcObject) {
@@ -201,7 +200,7 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs }: Props) {
 
         <div style={{ width: 160 }}>
           <ButtonMenu onStartCamera={startCamera} onRefreshLogs={onRefreshLogs} onClearLogs={onClearLogs} />
-          <Stack mt="md" spacing="xs">
+          <Stack gap="md" mt="md">
             <Button variant="default" onClick={streaming ? stopCamera : startCamera}>
               {streaming ? "Stop camera" : "Start camera"}
             </Button>
