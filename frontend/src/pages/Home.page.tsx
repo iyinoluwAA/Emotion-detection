@@ -323,14 +323,22 @@ export function HomePage() {
                 style={{ overflow: "hidden" }}
               >
                 <Group justify="space-between" mb="md" wrap="nowrap">
-                  <Title order={4} style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>
-                    Statistics
-                  </Title>
+                  <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                    <Title order={4} style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>
+                      Statistics
+                    </Title>
+                    {metricsIsCached && metricsLastSynced && !useMockData && (
+                      <Text size="xs" c="dimmed" style={{ fontStyle: "italic" }}>
+                        Last synced: {metricsLastSynced.toLocaleString()}
+                      </Text>
+                    )}
+                  </Stack>
                   <Tooltip label="Refresh metrics" withArrow>
                     <ActionIcon
                       variant="subtle"
                       onClick={() => refreshMetrics()}
                       loading={realMetrics.loading}
+                      disabled={!backendHealth.isOnline && !useMockData}
                       style={{ flexShrink: 0 }}
                     >
                       <IconRefresh size={18} />
