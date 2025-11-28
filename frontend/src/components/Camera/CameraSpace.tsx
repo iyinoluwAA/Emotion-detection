@@ -9,9 +9,10 @@ type Props = {
   submitFile: (file: Blob, filename?: string) => Promise<any>;
   onRefreshLogs?: () => void;
   onClearLogs?: () => void;
+  disabled?: boolean; // Disable uploads when backend is offline
 };
 
-export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs }: Props) {
+export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled = false }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -188,6 +189,8 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs }: Props) {
             label="Capture"
             loadingLabel="Capturing…"
             onClick={handleCapture}
+            disabled={!streaming || disabled}
+            title={disabled ? "Backend is offline. Uploads are disabled." : undefined}
           />
           <Box>
             <input
@@ -195,9 +198,12 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs }: Props) {
               style={{ display: "none" }}
               type="file"
               accept="image/*"
+              disabled={disabled}
               onChange={(e) => {
-                const f = e.target.files?.[0] ?? null;
-                void handleUploadFile(f);
+                if (!disabled) {
+                  const f = e.target.files?.[0] ?? null;
+                  void handleUploadFile(f);
+                }
               }}
             />
             <ButtonProgress
@@ -206,6 +212,8 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs }: Props) {
               label="Upload image"
               loadingLabel="Uploading…"
               onClick={() => fileInputRef.current?.click()}
+              disabled={disabled}
+              title={disabled ? "Backend is offline. Uploads are disabled." : undefined}
             />
           </Box>
         </Group>

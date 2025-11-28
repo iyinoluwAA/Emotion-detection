@@ -7,17 +7,29 @@ type Item = { title: string; value: string; diff?: number };
 export function StatsGrid({ items = [] as Item[] }: { items?: Item[] }) {
   const stats = items.map((stat) => {
     return (
-      <Paper withBorder p="md" radius="md" key={stat.title} style={{ minWidth: 0 }}>
+      <Paper 
+        withBorder 
+        p="md" 
+        radius="md" 
+        key={stat.title} 
+        style={{ 
+          minWidth: 0, 
+          overflow: "hidden",
+          wordWrap: "break-word",
+          overflowWrap: "break-word",
+        }}
+      >
         <Text 
           size="xs" 
           c="dimmed" 
           className={classes.title}
+          style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
         >
           {stat.title}
         </Text>
 
         <Group align="flex-end" gap="xs" mt={25} wrap="nowrap">
-          <Text className={classes.value}>
+          <Text className={classes.value} style={{ wordBreak: "break-word" }}>
             {stat.value}
           </Text>
           {typeof stat.diff !== "undefined" && (
@@ -33,7 +45,12 @@ export function StatsGrid({ items = [] as Item[] }: { items?: Item[] }) {
           )}
         </Group>
 
-        <Text fz="xs" c="dimmed" mt={7}>
+        <Text 
+          fz="xs" 
+          c="dimmed" 
+          mt={7}
+          style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
+        >
           Compared to previous month
         </Text>
       </Paper>

@@ -33,25 +33,42 @@ type TableRow = {
 };
 
 export function HomePage() {
-  // Check backend health to determine if we should use mock data
+  // Check backend health
   const backendHealth = useBackendHealth();
   const realLogs = useLogs(CONSTANTS.DEFAULT_LOG_LIMIT);
   const realMetrics = useMetrics();
   
-  // Use mock data if backend is offline OR if forced via env var
-  const useMockData = CONSTANTS.FORCE_MOCK_DATA || !backendHealth.isOnline;
+  // Only use mock data if explicitly forced (for development/testing)
+  const useMockData = CONSTANTS.FORCE_MOCK_DATA;
   
-  // Use mock data if backend is offline, otherwise use real data
+  // Use real data (with caching fallback) or mock data if forced
   const logs = useMockData ? MOCK_LOGS : realLogs.logs;
   const loadingLogs = useMockData ? false : realLogs.loading;
   const logsError = useMockData ? null : realLogs.error;
   const fetchLogs = useMockData ? () => Promise.resolve() : realLogs.fetchLogs;
+  const logsIsCached = useMockData ? false : realLogs.isCached;
+  const logsLastSynced = useMockData ? null : realLogs.lastSynced;
   
   const metrics = useMockData ? MOCK_METRICS : realMetrics.metrics;
   const refreshMetrics = useMockData ? () => Promise.resolve() : realMetrics.refresh;
+  const metricsIsCached = useMockData ? false : realMetrics.isCached;
+  const metricsLastSynced = useMockData ? null : realMetrics.lastSynced;
+  
+  // Determine if we're truly offline (no backend AND no cached data)
+  const isOffline = !backendHealth.isOnline && !logsIsCached && !metricsIsCached;
 
   const submitFile = useCallback(
     async (file: Blob | File, filename = "upload.jpg") => {
+      // Prevent uploads when backend is offline
+      if (!backendHealth.isOnline && !useMockData) {
+        notifications.show({
+          title: "Upload Disabled",
+          message: "Backend is offline. Please try again when connection is restored.",
+          color: "orange",
+        });
+        throw new Error("Backend is offline");
+      }
+
       try {
         const json = await uploadImage(file, filename);
         notifications.show({
@@ -59,17 +76,8 @@ export function HomePage() {
           message: "Image uploaded and analyzed successfully",
           color: "teal",
         });
-        return json;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to upload image";
-        notifications.show({
-          title: "Upload Failed",
-          message,
-          color: "red",
-        });
-        throw err;
-      } finally {
-        // ALWAYS refresh logs & metrics after attempt (success OR failure)
+        
+        // Refresh data after successful upload
         try {
           await fetchLogs(CONSTANTS.DEFAULT_LOG_LIMIT);
         } catch (err) {
@@ -80,9 +88,19 @@ export function HomePage() {
         } catch (err) {
           console.warn("Failed to refresh metrics after submit:", err);
         }
+        
+        return json;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to upload image";
+        notifications.show({
+          title: "Upload Failed",
+          message,
+          color: "red",
+        });
+        throw err;
       }
     },
-    [fetchLogs, refreshMetrics]
+    [fetchLogs, refreshMetrics, backendHealth.isOnline, useMockData]
   );
 
   const clearLogs = useCallback(() => {
@@ -238,18 +256,26 @@ export function HomePage() {
               )}
               {backendHealth.status === "offline" && (
                 <Tooltip
-                  label={backendHealth.error?.message || "Backend is offline. Using mock data."}
+                  label={
+                    logsIsCached || metricsIsCached
+                      ? `Backend offline. Showing cached data from ${logsLastSynced || metricsLastSynced ? new Date(logsLastSynced || metricsLastSynced!).toLocaleString() : "earlier"}.`
+                      : backendHealth.error?.message || "Backend is offline. No cached data available."
+                  }
                   withArrow
                 >
                   <Badge
-                    color="orange"
+                    color={logsIsCached || metricsIsCached ? "yellow" : "orange"}
                     variant="light"
                     size="lg"
                     leftSection={<IconWifiOff size={14} />}
                   >
                     <Text span size="sm" style={{ whiteSpace: "nowrap" }}>
-                      <Text span hiddenFrom="sm">Offline</Text>
-                      <Text span visibleFrom="sm">Backend Offline</Text>
+                      <Text span hiddenFrom="sm">
+                        {logsIsCached || metricsIsCached ? "Cached" : "Offline"}
+                      </Text>
+                      <Text span visibleFrom="sm">
+                        {logsIsCached || metricsIsCached ? "Offline (Cached)" : "Backend Offline"}
+                      </Text>
                     </Text>
                   </Badge>
                 </Tooltip>
@@ -267,6 +293,7 @@ export function HomePage() {
                 submitFile={submitFile}
                 onRefreshLogs={() => fetchLogs(CONSTANTS.REFRESH_LOG_LIMIT)}
                 onClearLogs={() => clearLogs()}
+                disabled={!backendHealth.isOnline && !useMockData}
               />
               <Divider my="md" />
               <Group justify="space-between" wrap="wrap">
@@ -288,14 +315,23 @@ export function HomePage() {
           {/* Stats Section - Full width on mobile, 1/3 on tablet+, 1/2 on large screens */}
           <Grid.Col span={{ base: 12, md: 4, lg: 5 }}>
             <Stack gap="md">
-              <Paper withBorder p={{ base: "md", sm: "lg" }} radius="md" shadow="sm">
-                <Group justify="space-between" mb="md">
-                  <Title order={4}>Statistics</Title>
+              <Paper 
+                withBorder 
+                p={{ base: "md", sm: "lg" }} 
+                radius="md" 
+                shadow="sm"
+                style={{ overflow: "hidden" }}
+              >
+                <Group justify="space-between" mb="md" wrap="nowrap">
+                  <Title order={4} style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>
+                    Statistics
+                  </Title>
                   <Tooltip label="Refresh metrics" withArrow>
                     <ActionIcon
                       variant="subtle"
                       onClick={() => refreshMetrics()}
                       loading={realMetrics.loading}
+                      style={{ flexShrink: 0 }}
                     >
                       <IconRefresh size={18} />
                     </ActionIcon>
@@ -328,13 +364,21 @@ export function HomePage() {
           <Grid.Col span={12}>
             <Paper withBorder p={{ base: "md", sm: "lg" }} radius="md" shadow="sm">
               <Group justify="space-between" mb="md" wrap="wrap">
-                <Title order={3}>Recent Predictions</Title>
+                <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                  <Title order={3}>Recent Predictions</Title>
+                  {logsIsCached && logsLastSynced && !useMockData && (
+                    <Text size="xs" c="dimmed" style={{ fontStyle: "italic" }}>
+                      Last synced: {logsLastSynced.toLocaleString()}
+                    </Text>
+                  )}
+                </Stack>
                 <Group gap="xs">
                   <Tooltip label="Refresh logs" withArrow>
                     <ActionIcon
                       variant="subtle"
                       onClick={() => fetchLogs(CONSTANTS.DEFAULT_LOG_LIMIT)}
                       loading={loadingLogs}
+                      disabled={!backendHealth.isOnline && !useMockData}
                     >
                       <IconRefresh size={18} />
                     </ActionIcon>
