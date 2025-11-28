@@ -1,5 +1,7 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { Grid, Container, Title, Space, Text } from "@mantine/core";
+import React, { useCallback, useMemo } from "react";
+import { Grid, Container, Title, Text, Box, Group, Stack, Paper, Badge, Divider, ActionIcon, Tooltip, Pagination, Select } from "@mantine/core";
+import { IconRefresh } from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
 import logo from "@/assets/Emotion-detection logo.png";
 
 import { ActionToggle } from "@/components/ColorSchemeToggle/ActionToggle";
@@ -7,99 +9,130 @@ import { CameraSpace } from "@/components/Camera/CameraSpace";
 import { TableReviews } from "@/components/TableReviews/TableReviews";
 import { StatsGrid } from "@/components/StatsGrid/StatsGrid";
 import { StatsRingCard } from "@/components/StatsRingCard/StatsRingCard";
+import { TableControls } from "@/components/TableControls/TableControls";
+import { EmotionCharts } from "@/components/EmotionCharts/EmotionCharts";
 import { uploadImage } from "@/api/client";
-
-type LogRowBackend = {
-  id?: number;
-  ts?: string;
-  filename?: string;
-  emotion?: string;
-  confidence?: number;
-};
+import { getImageUrl } from "@/api/config";
+import { useLogs } from "@/hooks/useLogs";
+import { useMetrics, type Metrics } from "@/hooks/useMetrics";
+import { useTableState } from "@/hooks/useTableState";
+import { CONSTANTS } from "@/constants";
+import { MOCK_LOGS, MOCK_METRICS, getMockImageUrl } from "@/utils/mockData";
+import { TableSkeleton, StatsSkeleton } from "@/components/LoadingSkeleton/LoadingSkeleton";
+import { EmptyState } from "@/components/EmptyState/EmptyState";
+import { ErrorState } from "@/components/ErrorState/ErrorState";
+import { exportToCSV, exportToJSON } from "@/utils/export";
 
 type TableRow = {
   image: string;
+  imageUrl?: string;
   emotions?: string;
-  timestap?: number | string;
+  timestamp?: number | string;
   reviews: { positive: number; negative: number };
 };
 
-const API_URL = import.meta.env.VITE_API_URL || "https://emotion-detection-1-8avi.onrender.com";
-
 export function HomePage() {
-  const [logs, setLogs] = useState<LogRowBackend[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [metrics, setMetrics] = useState<any>(null);
+  const realLogs = useLogs(CONSTANTS.DEFAULT_LOG_LIMIT);
+  const realMetrics = useMetrics();
+  
+  // Use mock data if enabled, otherwise use real data
+  const logs = CONSTANTS.USE_MOCK_DATA ? MOCK_LOGS : realLogs.logs;
+  const loadingLogs = CONSTANTS.USE_MOCK_DATA ? false : realLogs.loading;
+  const logsError = CONSTANTS.USE_MOCK_DATA ? null : realLogs.error;
+  const fetchLogs = CONSTANTS.USE_MOCK_DATA ? () => Promise.resolve() : realLogs.fetchLogs;
+  
+  const metrics = CONSTANTS.USE_MOCK_DATA ? MOCK_METRICS : realMetrics.metrics;
+  const refreshMetrics = CONSTANTS.USE_MOCK_DATA ? () => Promise.resolve() : realMetrics.refresh;
 
-  const fetchLogs = useCallback(async (limit = 20) => {
-    setLoadingLogs(true);
-    setError(null);
-    try {
-      const res = await fetch(`${API_URL}/logs?limit=${limit}`);
-      if (!res.ok) {throw new Error(`Status ${res.status}`)};
-      const json = await res.json();
-      setLogs(json.logs || []);
-    } catch (err) {
-      console.error("fetchLogs", err);
-      setError("Failed to fetch logs");
-    } finally {
-      setLoadingLogs(false);
-    }
-  }, []);
-
-  const fetchMetrics = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_URL}/metrics`);
-      if (!res.ok) {throw new Error(`Status ${res.status}`)};
-      const json = await res.json();
-      setMetrics(json.metrics ?? null);
-    } catch (err) {
-      console.warn("fetchMetrics failed", err);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchLogs(20);
-    void fetchMetrics();
-  }, [fetchLogs, fetchMetrics]);
-
-  // robust submitFile (see next section snippet if you want only the function)
-    const submitFile = useCallback(
+  const submitFile = useCallback(
     async (file: Blob | File, filename = "upload.jpg") => {
       try {
-        const json = await uploadImage(API_URL, file, filename);
+        const json = await uploadImage(file, filename);
+        notifications.show({
+          title: "Success",
+          message: "Image uploaded and analyzed successfully",
+          color: "teal",
+        });
         return json;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to upload image";
+        notifications.show({
+          title: "Upload Failed",
+          message,
+          color: "red",
+        });
+        throw err;
       } finally {
         // ALWAYS refresh logs & metrics after attempt (success OR failure)
         try {
-          await fetchLogs(20);
+          await fetchLogs(CONSTANTS.DEFAULT_LOG_LIMIT);
         } catch (err) {
           console.warn("Failed to refresh logs after submit:", err);
         }
         try {
-          await fetchMetrics();
+          await refreshMetrics();
         } catch (err) {
           console.warn("Failed to refresh metrics after submit:", err);
         }
       }
     },
-    [fetchLogs, fetchMetrics]
+    [fetchLogs, refreshMetrics]
   );
 
   const clearLogs = useCallback(() => {
-    setLogs([]);
+    // Note: This only clears local state. If you want to clear server data, add an API endpoint.
+    notifications.show({
+      title: "Logs Cleared",
+      message: "Local logs cleared (server data unchanged)",
+      color: "blue",
+    });
   }, []);
 
-  const tableRows: TableRow[] = logs.map((l) => {
-    const conf = typeof l.confidence === "number" ? Math.round((l.confidence ?? 0) * 100) : 0;
-    return {
-      image: l.filename ?? "upload",
-      emotions: l.emotion ?? "-",
-      timestap: l.ts ?? "-",
-      reviews: { positive: conf, negative: Math.max(0, 100 - conf) },
-    };
-  });
+  const tableRows: TableRow[] = useMemo(() => {
+    return logs.map((l) => {
+      const conf = typeof l.confidence === "number" ? Math.round((l.confidence ?? 0) * 100) : 0;
+      const imageUrl = CONSTANTS.USE_MOCK_DATA && l.filename
+        ? getMockImageUrl(l.filename)
+        : l.filename
+        ? getImageUrl(l.filename)
+        : undefined;
+      return {
+        image: l.filename ?? "upload",
+        imageUrl,
+        emotions: l.emotion ?? "-",
+        timestamp: l.ts ?? "-",
+        reviews: { positive: conf, negative: Math.max(0, 100 - conf) },
+      };
+    });
+  }, [logs]);
+
+  // Table state management (search, filter, pagination)
+  const tableState = useTableState(tableRows, 10);
+
+  // Export handlers
+  const handleExportCSV = useCallback(() => {
+    const exportData = tableState.filteredRows.map((row) => ({
+      Filename: row.image,
+      Emotion: row.emotions || "-",
+      Timestamp: row.timestamp || "-",
+      Confidence: `${row.reviews.positive}%`,
+    }));
+    exportToCSV(exportData, `emotion-detection-${new Date().toISOString().split("T")[0]}.csv`);
+    notifications.show({
+      title: "Export Successful",
+      message: "Data exported to CSV",
+      color: "teal",
+    });
+  }, [tableState.filteredRows]);
+
+  const handleExportJSON = useCallback(() => {
+    exportToJSON(tableState.filteredRows, `emotion-detection-${new Date().toISOString().split("T")[0]}.json`);
+    notifications.show({
+      title: "Export Successful",
+      message: "Data exported to JSON",
+      color: "teal",
+    });
+  }, [tableState.filteredRows]);
 
   const statsItems =
     metrics && Object.keys(metrics.by_label || {}).length > 0
@@ -117,38 +150,190 @@ export function HomePage() {
       : [{ label: "happy", count: 0 }, { label: "neutral", count: 0 }];
 
   return (
-    <Container size="xl" py="xl">
-      <div style={{ textAlign: "center" }}>
-        <img src={logo} alt="Emotion Detection Logo" width={40} height={40} />
-        <Title order={2}>Emotion Detection</Title>
-      </div>
-      <Space h="md" />
+    <Box style={{ minHeight: "100vh", background: "var(--mantine-color-body)" }}>
+      <Container size="xl" py={{ base: "md", sm: "xl" }} px={{ base: "xs", sm: "md" }}>
+        {/* Header Section */}
+        <Stack gap="md" mb={{ base: "lg", md: "xl" }} align="center">
+          <Group gap="md" wrap="nowrap">
+            <Box
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 12,
+                overflow: "hidden",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+              }}
+            >
+              <img
+                src={logo}
+                alt="Emotion Detection Logo"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            </Box>
+            <Stack gap={4}>
+              <Title order={1} fw={700} style={{ fontSize: "clamp(1.75rem, 4vw, 2.5rem)" }}>
+                Emotion Detection
+              </Title>
+              <Text size="md" c="dimmed" fw={500} visibleFrom="sm">
+                AI-powered emotion analysis from images
+              </Text>
+              <Text size="sm" c="dimmed" fw={500} hiddenFrom="sm">
+                AI-powered emotion analysis
+              </Text>
+            </Stack>
+          </Group>
+          {CONSTANTS.USE_MOCK_DATA && (
+            <Badge color="orange" variant="light" size="lg">
+              Using Mock Data for Testing
+            </Badge>
+          )}
+        </Stack>
 
-      {/* Grid with gutter for spacing */}
-      <Grid gutter="lg">
-        {/* Left: Camera and controls */}
-        <Grid.Col span={12} >
-          <CameraSpace submitFile={submitFile} onRefreshLogs={() => fetchLogs(8)} onClearLogs={() => clearLogs()} />
-          <Space h="md" />
-          <Text size="sm" color="dimmed">
-            {error ? `Error: ${error}` : loadingLogs ? "Loading logs..." : `Recent predictions: ${logs.length}`}
-          </Text>
-        </Grid.Col>
+        {/* Main Content - Responsive Grid */}
+        <Grid gutter={{ base: "md", sm: "lg" }}>
+          {/* Camera Section - Full width on mobile, 2/3 on tablet+, 1/2 on large screens */}
+          <Grid.Col span={{ base: 12, md: 8, lg: 7 }}>
+            <Paper withBorder p={{ base: "md", sm: "lg" }} radius="md" shadow="sm" style={{ height: "100%" }}>
+              <CameraSpace
+                submitFile={submitFile}
+                onRefreshLogs={() => fetchLogs(CONSTANTS.REFRESH_LOG_LIMIT)}
+                onClearLogs={() => clearLogs()}
+              />
+              <Divider my="md" />
+              <Group justify="space-between" wrap="wrap">
+                <Text size="sm" c="dimmed">
+                  {logsError ? (
+                    <Text span c="red" fw={500}>
+                      Error: {logsError}
+                    </Text>
+                  ) : loadingLogs ? (
+                    "Loading logs..."
+                  ) : (
+                    `${logs.length} ${logs.length === 1 ? "prediction" : "predictions"}`
+                  )}
+                </Text>
+              </Group>
+            </Paper>
+          </Grid.Col>
 
-        {/* Right: Stats (stacked) */}
-        <Grid.Col span={12} >
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <StatsGrid items={statsItems} />
-            <StatsRingCard total={metrics?.total ?? logs.length} completed={metrics?.by_label?.happy ?? 0} breakdown={ringBreakdown} />
-          </div>
-        </Grid.Col>
+          {/* Stats Section - Full width on mobile, 1/3 on tablet+, 1/2 on large screens */}
+          <Grid.Col span={{ base: 12, md: 4, lg: 5 }}>
+            <Stack gap="md">
+              <Paper withBorder p={{ base: "md", sm: "lg" }} radius="md" shadow="sm">
+                <Group justify="space-between" mb="md">
+                  <Title order={4}>Statistics</Title>
+                  <Tooltip label="Refresh metrics" withArrow>
+                    <ActionIcon
+                      variant="subtle"
+                      onClick={() => refreshMetrics()}
+                      loading={realMetrics.loading}
+                    >
+                      <IconRefresh size={18} />
+                    </ActionIcon>
+                  </Tooltip>
+                </Group>
+                {realMetrics.loading && !CONSTANTS.USE_MOCK_DATA ? (
+                  <StatsSkeleton />
+                ) : (
+                  <StatsGrid items={statsItems} />
+                )}
+              </Paper>
+              <Paper withBorder p={{ base: "md", sm: "lg" }} radius="md" shadow="sm">
+                <StatsRingCard
+                  total={metrics?.total ?? logs.length}
+                  completed={metrics?.by_label?.happy ?? 0}
+                  breakdown={ringBreakdown}
+                />
+              </Paper>
+            </Stack>
+          </Grid.Col>
 
-        {/* Below: Table (full width) */}
-        <Grid.Col span={12}>
-          <TableReviews rows={tableRows} />
-        </Grid.Col>
-      </Grid>
-      <ActionToggle />
-    </Container>
+          {/* Charts Section */}
+          {tableRows.length > 0 && (
+            <Grid.Col span={12}>
+              <EmotionCharts data={tableRows} />
+            </Grid.Col>
+          )}
+
+          {/* Table Section - Full width always */}
+          <Grid.Col span={12}>
+            <Paper withBorder p={{ base: "md", sm: "lg" }} radius="md" shadow="sm">
+              <Group justify="space-between" mb="md" wrap="wrap">
+                <Title order={3}>Recent Predictions</Title>
+                <Group gap="xs">
+                  <Tooltip label="Refresh logs" withArrow>
+                    <ActionIcon
+                      variant="subtle"
+                      onClick={() => fetchLogs(CONSTANTS.DEFAULT_LOG_LIMIT)}
+                      loading={loadingLogs}
+                    >
+                      <IconRefresh size={18} />
+                    </ActionIcon>
+                  </Tooltip>
+                </Group>
+              </Group>
+
+              {loadingLogs ? (
+                <TableSkeleton rows={5} />
+              ) : logsError ? (
+                <ErrorState
+                  title="Failed to load predictions"
+                  message={logsError}
+                  onRetry={() => fetchLogs(CONSTANTS.DEFAULT_LOG_LIMIT)}
+                />
+              ) : (
+                <Stack gap="md">
+                  <TableControls
+                    searchValue={tableState.filters.search}
+                    onSearchChange={tableState.updateSearch}
+                    emotionFilter={tableState.filters.emotions}
+                    onEmotionFilterChange={tableState.updateEmotionFilter}
+                    confidenceRange={tableState.filters.confidenceRange}
+                    onConfidenceRangeChange={tableState.updateConfidenceRange}
+                    dateFrom={tableState.filters.dateFrom}
+                    dateTo={tableState.filters.dateTo}
+                    onDateFromChange={tableState.updateDateFrom}
+                    onDateToChange={tableState.updateDateTo}
+                    onExportCSV={handleExportCSV}
+                    onExportJSON={handleExportJSON}
+                    availableEmotions={tableState.availableEmotions}
+                    totalResults={tableState.allRows.length}
+                    filteredResults={tableState.filteredRows.length}
+                  />
+
+                  <TableReviews rows={tableState.paginatedRows} />
+
+                  {tableState.totalPages > 1 && (
+                    <Group justify="space-between" wrap="wrap">
+                      <Group gap="xs" align="center">
+                        <Text size="sm" c="dimmed">
+                          Rows per page:
+                        </Text>
+                        <Select
+                          value={String(tableState.pageSize)}
+                          onChange={(value) => tableState.setPageSize(Number(value))}
+                          data={["5", "10", "20", "50", "100"]}
+                          style={{ width: 80 }}
+                        />
+                      </Group>
+                      <Pagination
+                        value={tableState.currentPage}
+                        onChange={tableState.setCurrentPage}
+                        total={tableState.totalPages}
+                        size="sm"
+                      />
+                    </Group>
+                  )}
+                </Stack>
+              )}
+            </Paper>
+          </Grid.Col>
+        </Grid>
+
+        <Box mt="xl" style={{ position: "fixed", bottom: 20, right: 20, zIndex: 1000 }}>
+          <ActionToggle />
+        </Box>
+      </Container>
+    </Box>
   );
 }

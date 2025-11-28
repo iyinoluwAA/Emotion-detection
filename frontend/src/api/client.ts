@@ -1,8 +1,10 @@
-export async function uploadImage(apiUrl: string, file: Blob | File, filename = "upload.jpg") {
+import { getApiUrl } from "./config";
+
+export async function uploadImage(file: Blob | File, filename = "upload.jpg") {
   const fd = new FormData();
   fd.append("image", file, filename);
 
-  const res = await fetch(`${apiUrl}/detect`, {
+  const res = await fetch(getApiUrl("detect"), {
     method: "POST",
     body: fd,
   });

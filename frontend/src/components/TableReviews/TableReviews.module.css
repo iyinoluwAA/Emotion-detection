@@ -3,3 +3,11 @@
     border-left: 3px solid light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
   }
 }
+
+.tableRow {
+  transition: background-color 0.2s ease;
+  
+  &:hover {
+    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+  }
+}

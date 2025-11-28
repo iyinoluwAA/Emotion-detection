@@ -1,12 +1,13 @@
 // src/hooks/useMetrics.ts
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getApiUrl } from "@/api/config";
 
-type Metrics = {
+export type Metrics = {
   by_label: Record<string, number>;
   total: number;
 };
 
-export function useMetrics(apiBase = import.meta.env.VITE_API_URL || "") {
+export function useMetrics() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +20,7 @@ export function useMetrics(apiBase = import.meta.env.VITE_API_URL || "") {
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      const res = await fetch(`${apiBase}/metrics`, { signal: ac.signal });
+      const res = await fetch(getApiUrl("metrics"), { signal: ac.signal });
       if (!res.ok) {
         throw new Error(`Status ${res.status}`);
       }
@@ -34,7 +35,7 @@ export function useMetrics(apiBase = import.meta.env.VITE_API_URL || "") {
     } finally {
       setLoading(false);
     }
-  }, [apiBase]);
+  }, []);
 
   useEffect(() => {
     void fetchMetrics();
