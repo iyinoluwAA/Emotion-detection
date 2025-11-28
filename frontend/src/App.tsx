@@ -8,6 +8,9 @@ import { Notifications } from '@mantine/notifications';
 import { Router } from './Router';
 import { theme } from './theme';
 
+// Global styles for animations
+import './styles.css';
+
 export default function App() {
   return (
     <MantineProvider theme={theme}>

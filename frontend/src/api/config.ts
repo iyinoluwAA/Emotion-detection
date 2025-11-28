@@ -9,6 +9,8 @@ export const API_CONFIG = {
     detect: "/detect",
     logs: "/logs",
     metrics: "/metrics",
+    health: "/health", // Backend health check endpoint
+    images: "/images", // Image serving endpoint
   },
 } as const;
 

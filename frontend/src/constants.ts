@@ -17,7 +17,8 @@ export const CONSTANTS = {
   CARD_PADDING: "md",
   CARD_RADIUS: "md",
   
-  // Mock data flag - set to true to use mock data for testing
-  USE_MOCK_DATA: import.meta.env.VITE_USE_MOCK_DATA === "true" || import.meta.env.DEV,
+  // Force mock data (only for development/testing)
+  // This should be false in production - backend health check will determine mock usage
+  FORCE_MOCK_DATA: import.meta.env.VITE_FORCE_MOCK_DATA === "true",
 } as const;
 

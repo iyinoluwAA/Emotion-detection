@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from "react";
 import { Grid, Container, Title, Text, Box, Group, Stack, Paper, Badge, Divider, ActionIcon, Tooltip, Pagination, Select } from "@mantine/core";
-import { IconRefresh } from "@tabler/icons-react";
+import { IconRefresh, IconWifi, IconWifiOff, IconLoader } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import logo from "@/assets/Emotion-detection logo.png";
 
@@ -16,6 +16,7 @@ import { getImageUrl } from "@/api/config";
 import { useLogs } from "@/hooks/useLogs";
 import { useMetrics, type Metrics } from "@/hooks/useMetrics";
 import { useTableState } from "@/hooks/useTableState";
+import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { CONSTANTS } from "@/constants";
 import { MOCK_LOGS, MOCK_METRICS, getMockImageUrl } from "@/utils/mockData";
 import { TableSkeleton, StatsSkeleton } from "@/components/LoadingSkeleton/LoadingSkeleton";
@@ -32,17 +33,22 @@ type TableRow = {
 };
 
 export function HomePage() {
+  // Check backend health to determine if we should use mock data
+  const backendHealth = useBackendHealth();
   const realLogs = useLogs(CONSTANTS.DEFAULT_LOG_LIMIT);
   const realMetrics = useMetrics();
   
-  // Use mock data if enabled, otherwise use real data
-  const logs = CONSTANTS.USE_MOCK_DATA ? MOCK_LOGS : realLogs.logs;
-  const loadingLogs = CONSTANTS.USE_MOCK_DATA ? false : realLogs.loading;
-  const logsError = CONSTANTS.USE_MOCK_DATA ? null : realLogs.error;
-  const fetchLogs = CONSTANTS.USE_MOCK_DATA ? () => Promise.resolve() : realLogs.fetchLogs;
+  // Use mock data if backend is offline OR if forced via env var
+  const useMockData = CONSTANTS.FORCE_MOCK_DATA || !backendHealth.isOnline;
   
-  const metrics = CONSTANTS.USE_MOCK_DATA ? MOCK_METRICS : realMetrics.metrics;
-  const refreshMetrics = CONSTANTS.USE_MOCK_DATA ? () => Promise.resolve() : realMetrics.refresh;
+  // Use mock data if backend is offline, otherwise use real data
+  const logs = useMockData ? MOCK_LOGS : realLogs.logs;
+  const loadingLogs = useMockData ? false : realLogs.loading;
+  const logsError = useMockData ? null : realLogs.error;
+  const fetchLogs = useMockData ? () => Promise.resolve() : realLogs.fetchLogs;
+  
+  const metrics = useMockData ? MOCK_METRICS : realMetrics.metrics;
+  const refreshMetrics = useMockData ? () => Promise.resolve() : realMetrics.refresh;
 
   const submitFile = useCallback(
     async (file: Blob | File, filename = "upload.jpg") => {
@@ -91,7 +97,7 @@ export function HomePage() {
   const tableRows: TableRow[] = useMemo(() => {
     return logs.map((l) => {
       const conf = typeof l.confidence === "number" ? Math.round((l.confidence ?? 0) * 100) : 0;
-      const imageUrl = CONSTANTS.USE_MOCK_DATA && l.filename
+      const imageUrl = useMockData && l.filename
         ? getMockImageUrl(l.filename)
         : l.filename
         ? getImageUrl(l.filename)
@@ -182,11 +188,44 @@ export function HomePage() {
               </Text>
             </Stack>
           </Group>
-          {CONSTANTS.USE_MOCK_DATA && (
-            <Badge color="orange" variant="light" size="lg">
-              Using Mock Data for Testing
-            </Badge>
-          )}
+          {/* Backend Status Indicator */}
+          <Group gap="xs">
+            {backendHealth.status === "checking" && (
+              <Badge
+                color="gray"
+                variant="light"
+                size="lg"
+                leftSection={<IconLoader size={14} style={{ animation: "spin 1s linear infinite" }} />}
+              >
+                Checking Backend...
+              </Badge>
+            )}
+            {backendHealth.status === "online" && (
+              <Badge
+                color="green"
+                variant="light"
+                size="lg"
+                leftSection={<IconWifi size={14} />}
+              >
+                Backend Online
+              </Badge>
+            )}
+            {backendHealth.status === "offline" && (
+              <Tooltip
+                label={backendHealth.error?.message || "Backend is offline. Using mock data."}
+                withArrow
+              >
+                <Badge
+                  color="orange"
+                  variant="light"
+                  size="lg"
+                  leftSection={<IconWifiOff size={14} />}
+                >
+                  Backend Offline (Mock Data)
+                </Badge>
+              </Tooltip>
+            )}
+          </Group>
         </Stack>
 
         {/* Main Content - Responsive Grid */}
@@ -232,7 +271,7 @@ export function HomePage() {
                     </ActionIcon>
                   </Tooltip>
                 </Group>
-                {realMetrics.loading && !CONSTANTS.USE_MOCK_DATA ? (
+                {realMetrics.loading && !useMockData ? (
                   <StatsSkeleton />
                 ) : (
                   <StatsGrid items={statsItems} />
