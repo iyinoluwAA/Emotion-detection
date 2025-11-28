@@ -84,6 +84,14 @@
   - IP-based identification (supports proxies)
   - Returns 429 with `retry_after` header
 
+### 11. Image Cleanup Utility ✅
+- **Added**: `app/image_cleanup.py`
+- **Features**:
+  - Remove orphaned images (not in database)
+  - Remove old images (configurable age)
+  - Dry-run mode for testing
+  - Detailed statistics
+
 ## API Changes
 
 ### `/detect` Endpoint
@@ -168,6 +176,19 @@
 - The `image_path` column will be automatically added on first use
 - Existing records will have empty `image_path` values
 - Old images in `tmp/` directory are not migrated (only new uploads are stored)
+
+### Image Cleanup
+Run cleanup manually:
+```python
+from app.image_cleanup import cleanup_orphaned_images
+
+# Dry run first
+stats = cleanup_orphaned_images("images/", "predictions.db", dry_run=True)
+print(stats)
+
+# Actually delete
+stats = cleanup_orphaned_images("images/", "predictions.db", dry_run=False)
+```
 
 ## Next Steps (Optional)
 
