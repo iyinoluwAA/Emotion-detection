@@ -372,6 +372,7 @@ def create_app(config: dict | None = None):
                 app.logger.error("Saved file is empty: %s", tmp_path)
                 raise ValidationError("Uploaded image is empty")
             
+            print(f"[DETECT] Saved file: {tmp_path}, size: {file_size} bytes")
             app.logger.info("Saved file: %s, size: %d bytes", tmp_path, file_size)
 
             # Preprocess face - preprocess_face is imported above in factory scope
@@ -382,7 +383,17 @@ def create_app(config: dict | None = None):
                 face_array = res
 
             if face_array is None:
-                app.logger.warning("No face detected for file %s (size: %d bytes, path: %s)", filename, file_size, tmp_path)
+                # Log detailed error information
+                app.logger.error("=" * 80)
+                app.logger.error("FACE DETECTION FAILED")
+                app.logger.error("File: %s", filename)
+                app.logger.error("File size: %d bytes", file_size)
+                app.logger.error("File path: %s", tmp_path)
+                app.logger.error("File exists: %s", os.path.exists(tmp_path))
+                if os.path.exists(tmp_path):
+                    actual_size = os.path.getsize(tmp_path)
+                    app.logger.error("Actual file size: %d bytes", actual_size)
+                app.logger.error("=" * 80)
                 raise ValidationError("No face detected in image")
 
             # Defensive conversion and validations
