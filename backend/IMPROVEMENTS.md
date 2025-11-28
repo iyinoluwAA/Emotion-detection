@@ -17,6 +17,7 @@
   - Serves stored images with proper MIME types
   - Security checks to prevent path traversal
   - 404 handling for missing images
+  - Rate limiting (200 req/min)
 
 ### 3. Database Schema Updates ✅
 - **Added**: `image_path` column to `predictions` table
@@ -198,4 +199,3 @@ stats = cleanup_orphaned_images("images/", "predictions.db", dry_run=False)
 5. **Metrics/Logging**: Structured logging and monitoring
 6. **API Documentation**: OpenAPI/Swagger spec
 7. **Unit Tests**: Comprehensive test coverage
-

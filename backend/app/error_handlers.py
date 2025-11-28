@@ -62,4 +62,3 @@ def register_error_handlers(app):
     def handle_internal_error(e):
         app.logger.exception("Internal server error")
         return jsonify({"error": "Internal server error"}), 500
-

@@ -114,4 +114,3 @@ def validate_confidence_range(min_conf: Optional[str], max_conf: Optional[str]) 
         return None, None, "min_confidence cannot be greater than max_confidence"
     
     return min_val, max_val, None
-

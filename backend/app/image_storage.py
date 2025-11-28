@@ -107,4 +107,3 @@ def delete_image(images_dir: str, filename: str) -> bool:
         return False
     except Exception:
         return False
-
