@@ -14,6 +14,8 @@ type Props = {
   onClick?: () => void;
   radius?: "sm" | "md" | "lg";
   minWidth?: number;
+  disabled?: boolean;
+  title?: string;
 };
 
 export function ButtonProgress({
@@ -26,6 +28,8 @@ export function ButtonProgress({
   onClick,
   radius = "sm",
   minWidth = 160,
+  disabled = false,
+  title,
 }: Props) {
   // const theme = useMantineTheme();
   const isLoading = status === "loading";
@@ -41,7 +45,8 @@ export function ButtonProgress({
       onClick={onClick}
       color={bgColor as any}
       radius={radius}
-      disabled={isLoading}
+      disabled={isLoading || disabled}
+      title={title}
     >
       <div className={classes.label}>
         {isLoading ? loadingLabel : isSuccess ? successLabel : isError ? errorLabel : label}

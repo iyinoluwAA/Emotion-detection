@@ -2,10 +2,20 @@
   padding: calc(var(--mantine-spacing-xl) * 1.5);
 }
 
+@media (max-width: 768px) {
+  .root {
+    padding: var(--mantine-spacing-md);
+  }
+}
+
 .value {
   font-size: 24px;
   font-weight: 700;
   line-height: 1;
+  display: block;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .diff {
@@ -21,4 +31,9 @@
 .title {
   font-weight: 700;
   text-transform: uppercase;
+  line-height: 1.4;
+  display: block;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }

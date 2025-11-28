@@ -33,25 +33,42 @@ type TableRow = {
 };
 
 export function HomePage() {
-  // Check backend health to determine if we should use mock data
+  // Check backend health
   const backendHealth = useBackendHealth();
   const realLogs = useLogs(CONSTANTS.DEFAULT_LOG_LIMIT);
   const realMetrics = useMetrics();
   
-  // Use mock data if backend is offline OR if forced via env var
-  const useMockData = CONSTANTS.FORCE_MOCK_DATA || !backendHealth.isOnline;
+  // Only use mock data if explicitly forced (for development/testing)
+  const useMockData = CONSTANTS.FORCE_MOCK_DATA;
   
-  // Use mock data if backend is offline, otherwise use real data
+  // Use real data (with caching fallback) or mock data if forced
   const logs = useMockData ? MOCK_LOGS : realLogs.logs;
   const loadingLogs = useMockData ? false : realLogs.loading;
   const logsError = useMockData ? null : realLogs.error;
   const fetchLogs = useMockData ? () => Promise.resolve() : realLogs.fetchLogs;
+  const logsIsCached = useMockData ? false : realLogs.isCached;
+  const logsLastSynced = useMockData ? null : realLogs.lastSynced;
   
   const metrics = useMockData ? MOCK_METRICS : realMetrics.metrics;
   const refreshMetrics = useMockData ? () => Promise.resolve() : realMetrics.refresh;
+  const metricsIsCached = useMockData ? false : realMetrics.isCached;
+  const metricsLastSynced = useMockData ? null : realMetrics.lastSynced;
+  
+  // Determine if we're truly offline (no backend AND no cached data)
+  const isOffline = !backendHealth.isOnline && !logsIsCached && !metricsIsCached;
 
   const submitFile = useCallback(
     async (file: Blob | File, filename = "upload.jpg") => {
+      // Prevent uploads when backend is offline
+      if (!backendHealth.isOnline && !useMockData) {
+        notifications.show({
+          title: "Upload Disabled",
+          message: "Backend is offline. Please try again when connection is restored.",
+          color: "orange",
+        });
+        throw new Error("Backend is offline");
+      }
+
       try {
         const json = await uploadImage(file, filename);
         notifications.show({
@@ -59,17 +76,8 @@ export function HomePage() {
           message: "Image uploaded and analyzed successfully",
           color: "teal",
         });
-        return json;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to upload image";
-        notifications.show({
-          title: "Upload Failed",
-          message,
-          color: "red",
-        });
-        throw err;
-      } finally {
-        // ALWAYS refresh logs & metrics after attempt (success OR failure)
+        
+        // Refresh data after successful upload
         try {
           await fetchLogs(CONSTANTS.DEFAULT_LOG_LIMIT);
         } catch (err) {
@@ -80,9 +88,19 @@ export function HomePage() {
         } catch (err) {
           console.warn("Failed to refresh metrics after submit:", err);
         }
+        
+        return json;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to upload image";
+        notifications.show({
+          title: "Upload Failed",
+          message,
+          color: "red",
+        });
+        throw err;
       }
     },
-    [fetchLogs, refreshMetrics]
+    [fetchLogs, refreshMetrics, backendHealth.isOnline, useMockData]
   );
 
   const clearLogs = useCallback(() => {
@@ -157,74 +175,112 @@ export function HomePage() {
 
   return (
     <Box style={{ minHeight: "100vh", background: "var(--mantine-color-body)" }}>
-      <Container size="xl" py={{ base: "md", sm: "xl" }} px={{ base: "xs", sm: "md" }}>
+      <Container size="xl" py={{ base: "md", sm: "xl" }} px={{ base: "sm", sm: "md" }}>
         {/* Header Section */}
-        <Stack gap="md" mb={{ base: "lg", md: "xl" }} align="center">
-          <Group gap="md" wrap="nowrap">
-            <Box
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 12,
-                overflow: "hidden",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-              }}
-            >
-              <img
-                src={logo}
-                alt="Emotion Detection Logo"
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            </Box>
-            <Stack gap={4}>
-              <Title order={1} fw={700} style={{ fontSize: "clamp(1.75rem, 4vw, 2.5rem)" }}>
-                Emotion Detection
-              </Title>
-              <Text size="md" c="dimmed" fw={500} visibleFrom="sm">
-                AI-powered emotion analysis from images
-              </Text>
-              <Text size="sm" c="dimmed" fw={500} hiddenFrom="sm">
-                AI-powered emotion analysis
-              </Text>
-            </Stack>
-          </Group>
-          {/* Backend Status Indicator */}
-          <Group gap="xs">
-            {backendHealth.status === "checking" && (
-              <Badge
-                color="gray"
-                variant="light"
-                size="lg"
-                leftSection={<IconLoader size={14} style={{ animation: "spin 1s linear infinite" }} />}
+        <Stack gap="md" mb={{ base: "lg", md: "xl" }} align="stretch">
+          <Group gap="md" wrap="wrap" justify="space-between" align="center">
+            <Group gap="md" wrap="wrap" style={{ flex: 1, minWidth: 0 }}>
+              <Box
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  flexShrink: 0,
+                }}
               >
-                Checking Backend...
-              </Badge>
-            )}
-            {backendHealth.status === "online" && (
-              <Badge
-                color="green"
-                variant="light"
-                size="lg"
-                leftSection={<IconWifi size={14} />}
-              >
-                Backend Online
-              </Badge>
-            )}
-            {backendHealth.status === "offline" && (
-              <Tooltip
-                label={backendHealth.error?.message || "Backend is offline. Using mock data."}
-                withArrow
-              >
+                <img
+                  src={logo}
+                  alt="Emotion Detection Logo"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              </Box>
+              <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
+                <Title 
+                  order={1} 
+                  fw={700} 
+                  style={{ 
+                    fontSize: "clamp(1.5rem, 4vw, 2.5rem)",
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                  }}
+                >
+                  Emotion Detection
+                </Title>
+                <Text 
+                  size="md" 
+                  c="dimmed" 
+                  fw={500} 
+                  visibleFrom="sm"
+                  style={{ wordBreak: "break-word" }}
+                >
+                  AI-powered emotion analysis from images
+                </Text>
+                <Text 
+                  size="sm" 
+                  c="dimmed" 
+                  fw={500} 
+                  hiddenFrom="sm"
+                  style={{ wordBreak: "break-word" }}
+                >
+                  AI-powered emotion analysis
+                </Text>
+              </Stack>
+            </Group>
+            {/* Backend Status Indicator */}
+            <Group gap="xs" wrap="wrap" justify="flex-end">
+              {backendHealth.status === "checking" && (
                 <Badge
-                  color="orange"
+                  color="gray"
                   variant="light"
                   size="lg"
-                  leftSection={<IconWifiOff size={14} />}
+                  leftSection={<IconLoader size={14} style={{ animation: "spin 1s linear infinite" }} />}
                 >
-                  Backend Offline (Mock Data)
+                  <Text span size="sm" style={{ whiteSpace: "nowrap" }}>
+                    Checking...
+                  </Text>
                 </Badge>
-              </Tooltip>
-            )}
+              )}
+              {backendHealth.status === "online" && (
+                <Badge
+                  color="green"
+                  variant="light"
+                  size="lg"
+                  leftSection={<IconWifi size={14} />}
+                >
+                  <Text span size="sm" style={{ whiteSpace: "nowrap" }}>
+                    <Text span visibleFrom="xs">Backend </Text>Online
+                  </Text>
+                </Badge>
+              )}
+              {backendHealth.status === "offline" && (
+                <Tooltip
+                  label={
+                    logsIsCached || metricsIsCached
+                      ? `Backend offline. Showing cached data from ${logsLastSynced || metricsLastSynced ? new Date(logsLastSynced || metricsLastSynced!).toLocaleString() : "earlier"}.`
+                      : backendHealth.error?.message || "Backend is offline. No cached data available."
+                  }
+                  withArrow
+                >
+                  <Badge
+                    color={logsIsCached || metricsIsCached ? "yellow" : "orange"}
+                    variant="light"
+                    size="lg"
+                    leftSection={<IconWifiOff size={14} />}
+                  >
+                    <Text span size="sm" style={{ whiteSpace: "nowrap" }}>
+                      <Text span hiddenFrom="sm">
+                        {logsIsCached || metricsIsCached ? "Cached" : "Offline"}
+                      </Text>
+                      <Text span visibleFrom="sm">
+                        {logsIsCached || metricsIsCached ? "Offline (Cached)" : "Backend Offline"}
+                      </Text>
+                    </Text>
+                  </Badge>
+                </Tooltip>
+              )}
+            </Group>
           </Group>
         </Stack>
 
@@ -237,6 +293,7 @@ export function HomePage() {
                 submitFile={submitFile}
                 onRefreshLogs={() => fetchLogs(CONSTANTS.REFRESH_LOG_LIMIT)}
                 onClearLogs={() => clearLogs()}
+                disabled={!backendHealth.isOnline && !useMockData}
               />
               <Divider my="md" />
               <Group justify="space-between" wrap="wrap">
@@ -258,14 +315,31 @@ export function HomePage() {
           {/* Stats Section - Full width on mobile, 1/3 on tablet+, 1/2 on large screens */}
           <Grid.Col span={{ base: 12, md: 4, lg: 5 }}>
             <Stack gap="md">
-              <Paper withBorder p={{ base: "md", sm: "lg" }} radius="md" shadow="sm">
-                <Group justify="space-between" mb="md">
-                  <Title order={4}>Statistics</Title>
+              <Paper 
+                withBorder 
+                p={{ base: "md", sm: "lg" }} 
+                radius="md" 
+                shadow="sm"
+                style={{ overflow: "hidden" }}
+              >
+                <Group justify="space-between" mb="md" wrap="nowrap">
+                  <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                    <Title order={4} style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>
+                      Statistics
+                    </Title>
+                    {metricsIsCached && metricsLastSynced && !useMockData && (
+                      <Text size="xs" c="dimmed" style={{ fontStyle: "italic" }}>
+                        Last synced: {metricsLastSynced.toLocaleString()}
+                      </Text>
+                    )}
+                  </Stack>
                   <Tooltip label="Refresh metrics" withArrow>
                     <ActionIcon
                       variant="subtle"
                       onClick={() => refreshMetrics()}
                       loading={realMetrics.loading}
+                      disabled={!backendHealth.isOnline && !useMockData}
+                      style={{ flexShrink: 0 }}
                     >
                       <IconRefresh size={18} />
                     </ActionIcon>
@@ -298,13 +372,21 @@ export function HomePage() {
           <Grid.Col span={12}>
             <Paper withBorder p={{ base: "md", sm: "lg" }} radius="md" shadow="sm">
               <Group justify="space-between" mb="md" wrap="wrap">
-                <Title order={3}>Recent Predictions</Title>
+                <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                  <Title order={3}>Recent Predictions</Title>
+                  {logsIsCached && logsLastSynced && !useMockData && (
+                    <Text size="xs" c="dimmed" style={{ fontStyle: "italic" }}>
+                      Last synced: {logsLastSynced.toLocaleString()}
+                    </Text>
+                  )}
+                </Stack>
                 <Group gap="xs">
                   <Tooltip label="Refresh logs" withArrow>
                     <ActionIcon
                       variant="subtle"
                       onClick={() => fetchLogs(CONSTANTS.DEFAULT_LOG_LIMIT)}
                       loading={loadingLogs}
+                      disabled={!backendHealth.isOnline && !useMockData}
                     >
                       <IconRefresh size={18} />
                     </ActionIcon>

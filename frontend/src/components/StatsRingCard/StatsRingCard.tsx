@@ -19,7 +19,7 @@ export function StatsRingCard({ total = 0, completed = 0, breakdown = [] }: Prop
   return (
     <Card withBorder p="xl" radius="md" className={classes.card}>
       <div className={classes.inner}>
-        <div>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <Text fz="xl" className={classes.label}>
             Output
           </Text>
@@ -33,10 +33,12 @@ export function StatsRingCard({ total = 0, completed = 0, breakdown = [] }: Prop
             </Text>
           </div>
 
-          <Group mt="lg">
+          <Group mt="lg" gap="md" wrap="wrap">
             {topTwo.map((s) => (
-              <div key={s.label}>
-                <Text className={classes.label}>{s.count}</Text>
+              <div key={s.label} style={{ minWidth: 0 }}>
+                <Text className={classes.label}>
+                  {s.count}
+                </Text>
                 <Text size="xs" c="dimmed">
                   {s.label}
                 </Text>
