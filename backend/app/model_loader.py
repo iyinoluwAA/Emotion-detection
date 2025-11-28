@@ -21,49 +21,54 @@ def load_emotion_model():
     repo_root = this_dir.parent                 # project root (/app in container)
     models_dir = repo_root / "models"
 
-    # Check for HardlyHumans ViT model first (best accuracy - 92.2%)
-    hardlyhumans_path = models_dir / "hardlyhumans" / "fine-tuned-vit" / "model.safetensors"
-    if hardlyhumans_path.exists():
-        try:
-            from transformers import AutoImageProcessor, AutoModelForImageClassification
-            
-            model_id = "HardlyHumans/Facial-expression-detection"
-            print(f"[MODEL] Loading Vision Transformer: {model_id}")
-            print(f"[MODEL] Accuracy: 92.2% - BEST MODEL!")
-            
-            processor = AutoImageProcessor.from_pretrained(model_id, cache_dir=str(models_dir))
-            model = AutoModelForImageClassification.from_pretrained(model_id, cache_dir=str(models_dir))
-            
-            # Get labels from model config
-            raw_labels = [model.config.id2label[i] for i in range(len(model.config.id2label))]
-            print(f"[MODEL] Raw labels from model config: {raw_labels}")
-            print(f"[MODEL] Label mapping (id2label): {model.config.id2label}")
-            
-            # Normalize label names to match our format (lowercase, standardize)
-            label_map = {
-                'anger': 'angry',
-                'disgust': 'disgust',
-                'fear': 'fear',
-                'happy': 'happy',
-                'neutral': 'neutral',
-                'sad': 'sad',
-                'surprise': 'surprise',
-                'contempt': 'contempt'  # New emotion in this model
-            }
-            labels = [label_map.get(label.lower(), label.lower()) for label in raw_labels]
-            print(f"[MODEL] Normalized labels: {labels}")
-            
-            return {
-                'model': model,
-                'processor': processor,
-                'type': 'vit'
-            }, labels, "hardlyhumans-vit-92.2%", 'vit'
-        except ImportError:
-            print("[MODEL] transformers library not installed. Install with: pip install transformers")
-            print("[MODEL] Falling back to Keras model...")
-        except Exception as e:
-            print(f"[MODEL] Failed to load ViT model: {e}")
-            print("[MODEL] Falling back to Keras model...")
+    # Try to load HardlyHumans ViT model first (best accuracy - 92.2%)
+    # Always try to load from HuggingFace - it will download and cache if needed
+    try:
+        from transformers import AutoImageProcessor, AutoModelForImageClassification
+        
+        model_id = "HardlyHumans/Facial-expression-detection"
+        print(f"[MODEL] Loading Vision Transformer: {model_id}")
+        print(f"[MODEL] Accuracy: 92.2% - BEST MODEL!")
+        print(f"[MODEL] Downloading from HuggingFace if not cached...")
+        
+        # Load from HuggingFace - will download and cache automatically
+        processor = AutoImageProcessor.from_pretrained(model_id, cache_dir=str(models_dir))
+        model = AutoModelForImageClassification.from_pretrained(model_id, cache_dir=str(models_dir))
+        
+        # Get labels from model config
+        raw_labels = [model.config.id2label[i] for i in range(len(model.config.id2label))]
+        print(f"[MODEL] Raw labels from model config: {raw_labels}")
+        print(f"[MODEL] Label mapping (id2label): {model.config.id2label}")
+        
+        # Normalize label names to match our format (lowercase, standardize)
+        label_map = {
+            'anger': 'angry',
+            'disgust': 'disgust',
+            'fear': 'fear',
+            'happy': 'happy',
+            'neutral': 'neutral',
+            'sad': 'sad',
+            'surprise': 'surprise',
+            'contempt': 'contempt'  # New emotion in this model
+        }
+        labels = [label_map.get(label.lower(), label.lower()) for label in raw_labels]
+        print(f"[MODEL] Normalized labels: {labels}")
+        
+        print(f"[MODEL] ✅ ViT model loaded successfully!")
+        return {
+            'model': model,
+            'processor': processor,
+            'type': 'vit'
+        }, labels, "hardlyhumans-vit-92.2%", 'vit'
+    except ImportError:
+        print("[MODEL] transformers library not installed. Install with: pip install transformers")
+        print("[MODEL] Falling back to Keras model...")
+    except Exception as e:
+        print(f"[MODEL] Failed to load ViT model: {e}")
+        print(f"[MODEL] Error details: {type(e).__name__}: {str(e)}")
+        import traceback
+        print(f"[MODEL] Traceback: {traceback.format_exc()}")
+        print("[MODEL] Falling back to Keras model...")
 
     # Fall back to Keras models
     try:
