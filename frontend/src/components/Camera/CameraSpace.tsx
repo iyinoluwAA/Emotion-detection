@@ -1,7 +1,9 @@
 import React, { useRef, useState } from "react";
-import { Button, Group, Card, Text } from "@mantine/core";
-import { ButtonProgress, Status } from "@/components/test/ButtonProgress";
-import { ButtonMenu } from "@/components/test/ButtonMenu";
+import { Button, Group, Card, Text, Box, Title, Stack, Badge } from "@mantine/core";
+import { IconCamera, IconUpload, IconVideo, IconVideoOff } from "@tabler/icons-react";
+import { ButtonProgress, Status } from "@/components/Buttons/ButtonProgress";
+import { ButtonMenu } from "@/components/Buttons/ButtonMenu";
+import { CONSTANTS } from "@/constants";
 
 type Props = {
   submitFile: (file: Blob, filename?: string) => Promise<any>;
@@ -114,48 +116,123 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs }: Props) {
   }
 
   return (
-    <Card withBorder p="md" radius="md">
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 480px", minWidth: 280 }}>
-          <div style={{ height: 440, background: "#111", borderRadius: 6, overflow: "hidden", position: "relative" }}>
-            <video ref={videoRef} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted />
-            <canvas ref={canvasRef} style={{ display: "none" }} />
-            {!streaming && (
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
-                <Text>Camera inactive</Text>
-              </div>
-            )}
-          </div>
+    <Stack gap="md">
+      <Group justify="space-between" align="center" wrap="wrap">
+        <Title order={4}>
+          Camera & Upload
+        </Title>
+        {streaming && (
+          <Badge color="green" variant="light" leftSection={<IconVideo size={12} />} size="lg">
+            Live
+          </Badge>
+        )}
+      </Group>
 
-          <Group mt="md" grow>
-            <ButtonProgress progress={progress} status={status} label="Capture" loadingLabel="Capturing…" onClick={handleCapture} />
-            <div>
-              <input
-                ref={fileInputRef}
-                style={{ display: "none" }}
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  void handleUploadFile(f);
-                }}
-              />
-              <ButtonProgress progress={progress} status={status} label="Upload image" loadingLabel="Uploading…" onClick={() => fileInputRef.current?.click()} />
-            </div>
+      {/* Responsive Layout: Stack on mobile, side-by-side on larger screens */}
+      <Stack gap="md">
+        {/* Camera Preview */}
+        <Box
+          style={{
+            width: "100%",
+            aspectRatio: "16/9",
+            maxHeight: "400px",
+            background: "var(--mantine-color-dark-8)",
+            borderRadius: 12,
+            overflow: "hidden",
+            position: "relative",
+            border: "2px solid var(--mantine-color-gray-3)",
+            boxShadow: streaming ? "0 0 20px rgba(34, 139, 34, 0.3)" : "0 2px 8px rgba(0,0,0,0.1)",
+            transition: "box-shadow 0.3s ease",
+          }}
+        >
+          <video
+            ref={videoRef}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: streaming ? "block" : "none",
+            }}
+            muted
+          />
+          <canvas ref={canvasRef} style={{ display: "none" }} />
+          {!streaming && (
+            <Box
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--mantine-color-gray-5)",
+                gap: 12,
+              }}
+            >
+              <IconCamera size={48} stroke={1.5} />
+              <Text size="sm" fw={500}>
+                Camera inactive
+              </Text>
+              <Text size="xs" c="dimmed">
+                Click "Start camera" to begin
+              </Text>
+            </Box>
+          )}
+        </Box>
+
+        {/* Action Buttons - Responsive Grid */}
+        <Group grow gap="md">
+          <ButtonProgress
+            progress={progress}
+            status={status}
+            label="Capture"
+            loadingLabel="Capturing…"
+            onClick={handleCapture}
+          />
+          <Box>
+            <input
+              ref={fileInputRef}
+              style={{ display: "none" }}
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                void handleUploadFile(f);
+              }}
+            />
+            <ButtonProgress
+              progress={progress}
+              status={status}
+              label="Upload image"
+              loadingLabel="Uploading…"
+              onClick={() => fileInputRef.current?.click()}
+            />
+          </Box>
+        </Group>
+
+        {selectedFileName && (
+          <Group gap="xs">
+            <IconUpload size={16} />
+            <Text size="sm" c="dimmed" truncate>
+              Selected: <Text span fw={500}>{selectedFileName}</Text>
+            </Text>
           </Group>
+        )}
 
-          {selectedFileName && <Text size="sm" mt="xs">Selected: {selectedFileName}</Text>}
-        </div>
-
-        <div style={{ width: 180 }}>
+        {/* Controls - Responsive: Stack on mobile, row on larger */}
+        <Group gap="md" grow>
           <ButtonMenu onStartCamera={startCamera} onRefreshLogs={onRefreshLogs} onClearLogs={onClearLogs} />
-          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-            <Button variant="default" onClick={streaming ? stopCamera : startCamera}>
-              {streaming ? "Stop camera" : "Start camera"}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </Card>
+          <Button
+            variant={streaming ? "filled" : "default"}
+            color={streaming ? "red" : "blue"}
+            leftSection={streaming ? <IconVideoOff size={18} /> : <IconVideo size={18} />}
+            onClick={streaming ? stopCamera : startCamera}
+            fullWidth
+          >
+            {streaming ? "Stop camera" : "Start camera"}
+          </Button>
+        </Group>
+      </Stack>
+    </Stack>
   );
 }
