@@ -32,8 +32,19 @@ def load_emotion_model():
         print(f"[MODEL] Downloading from HuggingFace if not cached...")
         
         # Load from HuggingFace - will download and cache automatically
-        processor = AutoImageProcessor.from_pretrained(model_id, cache_dir=str(models_dir))
-        model = AutoModelForImageClassification.from_pretrained(model_id, cache_dir=str(models_dir))
+        # Use low_cpu_mem_usage to reduce memory footprint during loading
+        processor = AutoImageProcessor.from_pretrained(
+            model_id, 
+            cache_dir=str(models_dir),
+            local_files_only=False  # Allow download if not cached
+        )
+        model = AutoModelForImageClassification.from_pretrained(
+            model_id, 
+            cache_dir=str(models_dir),
+            local_files_only=False,  # Allow download if not cached
+            low_cpu_mem_usage=True,  # Reduce memory usage during loading
+            torch_dtype="float32"    # Use float32 instead of float16 to avoid conversion overhead
+        )
         
         # Get labels from model config
         raw_labels = [model.config.id2label[i] for i in range(len(model.config.id2label))]

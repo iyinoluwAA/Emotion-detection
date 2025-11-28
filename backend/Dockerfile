@@ -24,7 +24,11 @@ RUN python -m pip install --upgrade pip setuptools wheel
 
 RUN pip install --no-cache-dir "numpy<2"
 
+# Install requirements (model downloads happen at runtime, not build time)
 RUN pip install --no-cache-dir --upgrade --ignore-installed -r /app/req_no_tf.txt
+
+# Note: Model files are downloaded at runtime (app startup), not during Docker build
+# This prevents memory issues during build on Render's free tier
 
 # Copy app (everything in backend)
 COPY . /app/
