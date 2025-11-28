@@ -154,11 +154,17 @@ def create_app(config: dict | None = None):
     app.config["MODEL_VERSION"] = model_version
 
     # ----------------------------
-    # Error handlers
+    # Error handlers (import before routes to ensure proper handling)
     # ----------------------------
     from .error_handlers import register_error_handlers, APIError, ValidationError, NotFoundError, ServiceUnavailableError
     
     register_error_handlers(app)
+    
+    # Make these available in route scope
+    globals()['APIError'] = APIError
+    globals()['ValidationError'] = ValidationError
+    globals()['NotFoundError'] = NotFoundError
+    globals()['ServiceUnavailableError'] = ServiceUnavailableError
     
     @app.errorhandler(RequestEntityTooLarge)
     def handle_large_file(e):
@@ -474,6 +480,9 @@ def create_app(config: dict | None = None):
                 "filename": stored_filename or used_filename,
             }), 200
 
+        except (ValidationError, APIError, NotFoundError, ServiceUnavailableError) as exc:
+            # Let Flask's error handler process these
+            raise
         except Exception as exc:
             app.logger.exception("detection error for file %s", filename)
             tb = traceback.format_exc()
@@ -513,12 +522,15 @@ def create_app(config: dict | None = None):
             image_path = get_image_path(images_dir, filename)
             
             if not image_path:
-                app.logger.warning("Image not found: %s", filename)
+                app.logger.warning("Image not found: %s (checked in %s)", filename, images_dir)
                 abort(404)
+            
+            # Extract the actual filename from the path (in case secure_filename changed it)
+            actual_filename = os.path.basename(image_path)
             
             return send_from_directory(
                 images_dir,
-                filename,
+                actual_filename,
                 mimetype="image/jpeg",  # Default, will be auto-detected
             )
         except Exception as exc:
