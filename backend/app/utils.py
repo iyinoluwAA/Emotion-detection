@@ -338,10 +338,10 @@ def preprocess_face(
                                     face_arr = face_arr.astype(np.float32)
                                 
                                 if np.isfinite(face_arr).all():
-                    print(f"[FACE_DETECTION] Successfully using center crop fallback for {image_path}, final shape: {face_arr.shape}")
-                    logger.info(f"Successfully using center crop fallback for {image_path}, final shape: {face_arr.shape}")
-                    used_filename = os.path.basename(image_path) or "upload.jpg"
-                    return face_arr, used_filename
+                                    print(f"[FACE_DETECTION] Successfully using center crop fallback for {image_path}, final shape: {face_arr.shape}")
+                                    logger.info(f"Successfully using center crop fallback for {image_path}, final shape: {face_arr.shape}")
+                                    used_filename = os.path.basename(image_path) or "upload.jpg"
+                                    return face_arr, used_filename
                 except Exception as e:
                     logger.warning(f"Center crop fallback failed: {e}")
             
@@ -365,10 +365,10 @@ def preprocess_face(
                             face_arr = face_arr.astype(np.float32)
                         
                         if np.isfinite(face_arr).all():
-                    print(f"[FACE_DETECTION] Successfully using entire image fallback for {image_path}, final shape: {face_arr.shape}")
-                    logger.info(f"Successfully using entire image fallback for {image_path}, final shape: {face_arr.shape}")
-                    used_filename = os.path.basename(image_path) or "upload.jpg"
-                    return face_arr, used_filename
+                            print(f"[FACE_DETECTION] Successfully using entire image fallback for {image_path}, final shape: {face_arr.shape}")
+                            logger.info(f"Successfully using entire image fallback for {image_path}, final shape: {face_arr.shape}")
+                            used_filename = os.path.basename(image_path) or "upload.jpg"
+                            return face_arr, used_filename
             except Exception as e:
                 logger.exception(f"Entire image fallback also failed for {image_path}: {e}")
             
