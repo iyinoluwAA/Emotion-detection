@@ -157,74 +157,104 @@ export function HomePage() {
 
   return (
     <Box style={{ minHeight: "100vh", background: "var(--mantine-color-body)" }}>
-      <Container size="xl" py={{ base: "md", sm: "xl" }} px={{ base: "xs", sm: "md" }}>
+      <Container size="xl" py={{ base: "md", sm: "xl" }} px={{ base: "sm", sm: "md" }}>
         {/* Header Section */}
-        <Stack gap="md" mb={{ base: "lg", md: "xl" }} align="center">
-          <Group gap="md" wrap="nowrap">
-            <Box
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 12,
-                overflow: "hidden",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-              }}
-            >
-              <img
-                src={logo}
-                alt="Emotion Detection Logo"
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            </Box>
-            <Stack gap={4}>
-              <Title order={1} fw={700} style={{ fontSize: "clamp(1.75rem, 4vw, 2.5rem)" }}>
-                Emotion Detection
-              </Title>
-              <Text size="md" c="dimmed" fw={500} visibleFrom="sm">
-                AI-powered emotion analysis from images
-              </Text>
-              <Text size="sm" c="dimmed" fw={500} hiddenFrom="sm">
-                AI-powered emotion analysis
-              </Text>
-            </Stack>
-          </Group>
-          {/* Backend Status Indicator */}
-          <Group gap="xs">
-            {backendHealth.status === "checking" && (
-              <Badge
-                color="gray"
-                variant="light"
-                size="lg"
-                leftSection={<IconLoader size={14} style={{ animation: "spin 1s linear infinite" }} />}
+        <Stack gap="md" mb={{ base: "lg", md: "xl" }} align="stretch">
+          <Group gap="md" wrap="wrap" justify="space-between" align="center">
+            <Group gap="md" wrap="wrap" style={{ flex: 1, minWidth: 0 }}>
+              <Box
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  flexShrink: 0,
+                }}
               >
-                Checking Backend...
-              </Badge>
-            )}
-            {backendHealth.status === "online" && (
-              <Badge
-                color="green"
-                variant="light"
-                size="lg"
-                leftSection={<IconWifi size={14} />}
-              >
-                Backend Online
-              </Badge>
-            )}
-            {backendHealth.status === "offline" && (
-              <Tooltip
-                label={backendHealth.error?.message || "Backend is offline. Using mock data."}
-                withArrow
-              >
+                <img
+                  src={logo}
+                  alt="Emotion Detection Logo"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              </Box>
+              <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
+                <Title 
+                  order={1} 
+                  fw={700} 
+                  style={{ 
+                    fontSize: "clamp(1.5rem, 4vw, 2.5rem)",
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                  }}
+                >
+                  Emotion Detection
+                </Title>
+                <Text 
+                  size="md" 
+                  c="dimmed" 
+                  fw={500} 
+                  visibleFrom="sm"
+                  style={{ wordBreak: "break-word" }}
+                >
+                  AI-powered emotion analysis from images
+                </Text>
+                <Text 
+                  size="sm" 
+                  c="dimmed" 
+                  fw={500} 
+                  hiddenFrom="sm"
+                  style={{ wordBreak: "break-word" }}
+                >
+                  AI-powered emotion analysis
+                </Text>
+              </Stack>
+            </Group>
+            {/* Backend Status Indicator */}
+            <Group gap="xs" wrap="wrap" justify="flex-end">
+              {backendHealth.status === "checking" && (
                 <Badge
-                  color="orange"
+                  color="gray"
                   variant="light"
                   size="lg"
-                  leftSection={<IconWifiOff size={14} />}
+                  leftSection={<IconLoader size={14} style={{ animation: "spin 1s linear infinite" }} />}
                 >
-                  Backend Offline (Mock Data)
+                  <Text span size="sm" style={{ whiteSpace: "nowrap" }}>
+                    Checking...
+                  </Text>
                 </Badge>
-              </Tooltip>
-            )}
+              )}
+              {backendHealth.status === "online" && (
+                <Badge
+                  color="green"
+                  variant="light"
+                  size="lg"
+                  leftSection={<IconWifi size={14} />}
+                >
+                  <Text span size="sm" style={{ whiteSpace: "nowrap" }}>
+                    <Text span visibleFrom="xs">Backend </Text>Online
+                  </Text>
+                </Badge>
+              )}
+              {backendHealth.status === "offline" && (
+                <Tooltip
+                  label={backendHealth.error?.message || "Backend is offline. Using mock data."}
+                  withArrow
+                >
+                  <Badge
+                    color="orange"
+                    variant="light"
+                    size="lg"
+                    leftSection={<IconWifiOff size={14} />}
+                  >
+                    <Text span size="sm" style={{ whiteSpace: "nowrap" }}>
+                      <Text span hiddenFrom="sm">Offline</Text>
+                      <Text span visibleFrom="sm">Backend Offline</Text>
+                    </Text>
+                  </Badge>
+                </Tooltip>
+              )}
+            </Group>
           </Group>
         </Stack>
 

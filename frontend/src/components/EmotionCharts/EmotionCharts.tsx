@@ -117,7 +117,6 @@ export function EmotionCharts({ data }: Props) {
               size={300}
               labelsPosition="outside"
               labelsType="percent"
-              withLegend
             />
           </Box>
         </Tabs.Panel>
@@ -135,7 +134,6 @@ export function EmotionCharts({ data }: Props) {
                   color: item.color,
                 }))}
                 curveType="natural"
-                withLegend
                 withTooltip
                 withDots
               />
@@ -156,7 +154,6 @@ export function EmotionCharts({ data }: Props) {
               dataKey="range"
               series={[{ name: "count", color: "blue" }]}
               withTooltip
-              withLegend
               tickLine="y"
             />
           </Box>

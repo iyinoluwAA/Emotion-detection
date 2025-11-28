@@ -19,25 +19,63 @@ export function StatsRingCard({ total = 0, completed = 0, breakdown = [] }: Prop
   return (
     <Card withBorder p="xl" radius="md" className={classes.card}>
       <div className={classes.inner}>
-        <div>
-          <Text fz="xl" className={classes.label}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <Text 
+            fz="xl" 
+            className={classes.label}
+            style={{ 
+              wordBreak: "break-word",
+              overflowWrap: "break-word",
+            }}
+          >
             Output
           </Text>
 
           <div>
-            <Text className={classes.lead} mt={30}>
+            <Text 
+              className={classes.lead} 
+              mt={30}
+              style={{ 
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
+              }}
+            >
               {completed} completed {completed === 1 ? "task" : "tasks"}
             </Text>
-            <Text fz="xs" c="dimmed">
+            <Text 
+              fz="xs" 
+              c="dimmed"
+              style={{ 
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
+              }}
+            >
               Completed
             </Text>
           </div>
 
-          <Group mt="lg">
+          <Group mt="lg" gap="md" wrap="wrap">
             {topTwo.map((s) => (
-              <div key={s.label}>
-                <Text className={classes.label}>{s.count}</Text>
-                <Text size="xs" c="dimmed">
+              <div key={s.label} style={{ minWidth: 0 }}>
+                <Text 
+                  className={classes.label}
+                  style={{ 
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                  }}
+                >
+                  {s.count}
+                </Text>
+                <Text 
+                  size="xs" 
+                  c="dimmed"
+                  style={{ 
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    maxWidth: "100px",
+                  }}
+                >
                   {s.label}
                 </Text>
               </div>
