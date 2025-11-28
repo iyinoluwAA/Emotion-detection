@@ -21,7 +21,7 @@ DB_PATH = os.path.join(PROJECT_ROOT, "predictions.db")
 
 # App-level defaults (can be overridden via app.config)
 DEFAULTS = {
-    "MIN_CONFIDENCE": 0.5,
+    "MIN_CONFIDENCE": 0.20,  # Lowered to 0.20 to allow more predictions through (was 0.25, originally 0.5)
     "MAX_FILE_SIZE": 5 * 1024 * 1024,  # 5 MB
     "TMP_DIR": TMP_DIR_DEFAULT,
     "IMAGES_DIR": IMAGES_DIR_DEFAULT,
@@ -109,7 +109,7 @@ def create_app(config: dict | None = None):
 
     # Local (deferred) imports — avoid import-time side effects
     from .model_loader import load_emotion_model
-    from .db_logger import init_db, log_prediction, get_metrics, tail_rows, get_total_count
+    from .db_logger import init_db, log_prediction, get_metrics, tail_rows, get_total_count, delete_prediction
     from .utils import preprocess_face
     from .image_storage import save_image, get_image_path, ensure_images_dir
     from .validators import validate_image_file, validate_pagination_params, validate_confidence_range
@@ -126,32 +126,42 @@ def create_app(config: dict | None = None):
     model = None
     labels = None
     model_version = "unknown"
+    model_type = "unknown"
     try:
-        # load_emotion_model may return (model, labels) or (model, labels, version)
+        # load_emotion_model returns (model, labels, version, model_type)
         res = load_emotion_model()
-        if isinstance(res, tuple) and len(res) == 3:
+        if isinstance(res, tuple) and len(res) == 4:
+            model, labels, model_version, model_type = res
+        elif isinstance(res, tuple) and len(res) == 3:
             model, labels, model_version = res
+            model_type = "keras"  # Default for old format
         elif isinstance(res, tuple) and len(res) == 2:
             model, labels = res
+            model_type = "keras"  # Default for old format
         else:
             # Unexpected return shape - try to be permissive
             try:
                 model = res
                 labels = None
+                model_type = "keras"
             except Exception:
                 model = None
                 labels = None
-        app.logger.info("Model loaded: %s (version=%s)", bool(model), model_version)
+                model_type = "unknown"
+        app.logger.info("Model loaded: %s (version=%s, type=%s)", bool(model), model_version, model_type)
+        print(f"[APP] Model loaded: type={model_type}, version={model_version}, labels={len(labels) if labels else 0}")
     except Exception as exc:
         app.logger.exception("Model failed to load at startup: %s", exc)
         model = None
         labels = None
         model_version = "failed"
+        model_type = "unknown"
 
     # Store in app.config for possible runtime replacement
     app.config["MODEL"] = model
     app.config["LABELS"] = labels
     app.config["MODEL_VERSION"] = model_version
+    app.config["MODEL_TYPE"] = model_type
 
     # ----------------------------
     # Error handlers (import before routes to ensure proper handling)
@@ -316,6 +326,40 @@ def create_app(config: dict | None = None):
             app.logger.exception("Failed to fetch logs")
             return jsonify({"error": "Failed to fetch logs", "detail": str(exc)}), 500
 
+    @app.route("/logs/<int:prediction_id>", methods=["DELETE"])
+    def delete_log(prediction_id: int):
+        """
+        DELETE /logs/<id>
+        
+        Delete a prediction by ID.
+        """
+        # Rate limiting
+        client_id = get_client_identifier(request)
+        is_allowed, remaining = logs_limiter.is_allowed(client_id)
+        if not is_allowed:
+            return jsonify({
+                "error": "Rate limit exceeded",
+                "detail": f"Maximum {logs_limiter.max_requests} requests per {logs_limiter.window_seconds} seconds",
+                "retry_after": logs_limiter.window_seconds,
+            }), 429
+        
+        try:
+            # Delete from database
+            deleted = delete_prediction(DB_PATH, prediction_id)
+            
+            if not deleted:
+                return jsonify({"error": "Prediction not found"}), 404
+            
+            # Optionally delete associated image file
+            from .image_storage import delete_image
+            # Note: We'd need to fetch the image_path first, but for now just delete from DB
+            # You can enhance this later to also delete the image file
+            
+            return jsonify({"ok": True, "message": "Prediction deleted successfully"}), 200
+        except Exception as exc:
+            app.logger.exception(f"Failed to delete prediction {prediction_id}")
+            return jsonify({"error": "Failed to delete prediction", "detail": str(exc)}), 500
+
     @app.route("/detect", methods=["POST"])
     def detect():
         """
@@ -335,10 +379,13 @@ def create_app(config: dict | None = None):
         # Use config-stored model/labels (these can be updated at runtime).
         model_local = app.config.get("MODEL")
         labels_local = app.config.get("LABELS") or []
+        model_type = app.config.get("MODEL_TYPE", "keras")
 
         if model_local is None:
             app.logger.error("Detect called but model not loaded")
             raise ServiceUnavailableError("Model not loaded on server")
+        
+        print(f"[DETECT] Using model type: {model_type}")
 
         # Validate upload presence
         if "image" not in request.files:
@@ -375,97 +422,146 @@ def create_app(config: dict | None = None):
             print(f"[DETECT] Saved file: {tmp_path}, size: {file_size} bytes")
             app.logger.info("Saved file: %s, size: %d bytes", tmp_path, file_size)
 
-            # Preprocess face - preprocess_face is imported above in factory scope
-            res = preprocess_face(tmp_path)
-            if isinstance(res, tuple):
-                face_array, used_filename = res
-            else:
-                face_array = res
-
-            if face_array is None:
-                # Log detailed error information
-                app.logger.error("=" * 80)
-                app.logger.error("FACE DETECTION FAILED")
-                app.logger.error("File: %s", filename)
-                app.logger.error("File size: %d bytes", file_size)
-                app.logger.error("File path: %s", tmp_path)
-                app.logger.error("File exists: %s", os.path.exists(tmp_path))
-                if os.path.exists(tmp_path):
-                    actual_size = os.path.getsize(tmp_path)
-                    app.logger.error("Actual file size: %d bytes", actual_size)
-                app.logger.error("=" * 80)
-                raise ValidationError("No face detected in image")
-
-            # Defensive conversion and validations
+            # Import numpy for both paths
             import numpy as np
 
-            try:
-                face_input = np.asarray(face_array)
-            except Exception as exc:
-                app.logger.exception("Failed converting preprocessed face to numpy array")
-                return jsonify({"error": "Invalid preprocessed face data."}), 500
-
-            if getattr(face_input, "dtype", None) == object:
-                app.logger.error("face_input has object dtype (likely contains None) for file %s", filename)
-                return jsonify({"error": "Invalid preprocessed face data (object dtype)."}), 500
-
-            # Ensure batch dim and channel dim
-            if face_input.ndim == 2:
-                # (H, W) -> (1, H, W, 1)
-                face_input = np.expand_dims(np.expand_dims(face_input, axis=-1), axis=0)
-            elif face_input.ndim == 3:
-                # (H, W, C) -> (1, H, W, C)
-                face_input = np.expand_dims(face_input, axis=0)
-            elif face_input.ndim == 4:
-                # already batched
-                pass
+            # Handle ViT and Keras models differently
+            if model_type == "vit":
+                # Vision Transformer model - needs RGB PIL Image
+                from app.vit_utils import preprocess_face_for_vit, predict_with_vit
+                from PIL import Image
+                
+                face_image, used_filename = preprocess_face_for_vit(tmp_path)
+                if face_image is None:
+                    app.logger.warning("No face detected for file %s (size: %d bytes)", filename, file_size)
+                    raise ValidationError("No face detected in image. Please ensure your face is clearly visible, well-lit, and facing the camera.")
+                
+                # Run ViT prediction
+                idx, confidence, all_probs = predict_with_vit(model_local, face_image, labels_local)
+                emotion = labels_local[idx] if idx < len(labels_local) else str(idx)
+                
+                # Debug output
+                sorted_probs = sorted(all_probs.items(), key=lambda x: x[1], reverse=True)
+                app.logger.info(f"Prediction probabilities for {filename} (sorted): {sorted_probs}")
+                print(f"[DETECT] All emotion probabilities (sorted by confidence):")
+                for emo, prob in sorted_probs:
+                    marker = " <-- SELECTED" if emo == emotion else ""
+                    print(f"  {emo}: {prob:.3f}{marker}")
+                print(f"[DETECT] Predicted emotion: {emotion}, confidence: {confidence:.3f}")
+                
+                # Convert to numpy array format for compatibility with rest of code
+                probs = np.array([all_probs.get(labels_local[i] if i < len(labels_local) else f"class_{i}", 0.0) 
+                                 for i in range(len(labels_local))])
             else:
-                app.logger.error("Unsupported preprocessed face ndim %s for file %s", getattr(face_input, "ndim", None), filename)
-                return jsonify({"error": "Unsupported preprocessed face shape."}), 500
+                # Keras model - existing code path
+                # Preprocess face - preprocess_face is imported above in factory scope
+                res = preprocess_face(tmp_path)
+                if isinstance(res, tuple):
+                    face_array, used_filename = res
+                else:
+                    face_array = res
 
-            # sanity checks
-            if face_input.shape[0] < 1:
-                return jsonify({"error": "Empty batch sent to model."}), 500
-            try:
-                if not np.isfinite(face_input.astype("float32")).all():
-                    app.logger.error("face_input contains non-finite values for file %s", filename)
-                    return jsonify({"error": "Preprocessed face contains non-finite values."}), 500
-            except Exception:
-                app.logger.exception("Failed checking finiteness of face_input")
-                return jsonify({"error": "Preprocessed face contains invalid numeric values."}), 500
+                if face_array is None:
+                    app.logger.warning("No face detected for file %s (size: %d bytes)", filename, file_size)
+                    raise ValidationError("No face detected in image. Please ensure your face is clearly visible, well-lit, and facing the camera.")
 
-            # Run prediction
-            try:
-                preds = model_local.predict(face_input)
-            except Exception as exc:
-                app.logger.exception("Model predict failed for file %s", filename)
-                return jsonify({"error": "Prediction failed", "detail": str(exc)}), 500
+                # Defensive conversion and validations (numpy already imported above)
+                try:
+                    face_input = np.asarray(face_array)
+                except Exception as exc:
+                    app.logger.exception("Failed converting preprocessed face to numpy array")
+                    return jsonify({"error": "Invalid preprocessed face data."}), 500
 
-            if preds is None:
-                return jsonify({"error": "Prediction returned no output"}), 500
+                if getattr(face_input, "dtype", None) == object:
+                    app.logger.error("face_input has object dtype (likely contains None) for file %s", filename)
+                    return jsonify({"error": "Invalid preprocessed face data (object dtype)."}), 500
 
-            arr = np.asarray(preds)
-            if arr.ndim == 2:
-                probs = arr[0]
-            elif arr.ndim == 1:
-                probs = arr
-            else:
-                app.logger.error("Unexpected prediction shape %s for file %s", getattr(arr, "shape", None), filename)
-                return jsonify({"error": "Unexpected prediction shape", "shape": list(getattr(arr, "shape", []))}), 500
+                # Ensure batch dim and channel dim
+                if face_input.ndim == 2:
+                    # (H, W) -> (1, H, W, 1)
+                    face_input = np.expand_dims(np.expand_dims(face_input, axis=-1), axis=0)
+                elif face_input.ndim == 3:
+                    # (H, W, C) -> (1, H, W, C)
+                    face_input = np.expand_dims(face_input, axis=0)
+                elif face_input.ndim == 4:
+                    # already batched
+                    pass
+                else:
+                    app.logger.error("Unsupported preprocessed face ndim %s for file %s", getattr(face_input, "ndim", None), filename)
+                    return jsonify({"error": "Unsupported preprocessed face shape."}), 500
 
-            if probs.size == 0:
-                return jsonify({"error": "Empty prediction probabilities"}), 500
+                # sanity checks
+                if face_input.shape[0] < 1:
+                    return jsonify({"error": "Empty batch sent to model."}), 500
+                try:
+                    if not np.isfinite(face_input.astype("float32")).all():
+                        app.logger.error("face_input contains non-finite values for file %s", filename)
+                        return jsonify({"error": "Preprocessed face contains non-finite values."}), 500
+                except Exception:
+                    app.logger.exception("Failed checking finiteness of face_input")
+                    return jsonify({"error": "Preprocessed face contains invalid numeric values."}), 500
 
-            idx = int(np.argmax(probs))
-            confidence = float(probs[idx])
+                # Run prediction
+                try:
+                    preds = model_local.predict(face_input, verbose=0)
+                except Exception as exc:
+                    app.logger.exception("Model predict failed for file %s", filename)
+                    return jsonify({"error": "Prediction failed", "detail": str(exc)}), 500
 
-            # Resolve label safely
-            if isinstance(labels_local, dict):
-                emotion = labels_local.get(str(idx)) or labels_local.get(idx) or list(labels_local.values())[idx]
-            elif isinstance(labels_local, list):
-                emotion = labels_local[idx] if 0 <= idx < len(labels_local) else str(idx)
-            else:
-                emotion = str(idx)
+                if preds is None:
+                    return jsonify({"error": "Prediction returned no output"}), 500
+
+                arr = np.asarray(preds)
+                if arr.ndim == 2:
+                    probs = arr[0]
+                elif arr.ndim == 1:
+                    probs = arr
+                else:
+                    app.logger.error("Unexpected prediction shape %s for file %s", getattr(arr, "shape", None), filename)
+                    return jsonify({"error": "Unexpected prediction shape", "shape": list(getattr(arr, "shape", []))}), 500
+
+                if probs.size == 0:
+                    return jsonify({"error": "Empty prediction probabilities"}), 500
+                
+                # Verify model output matches expected number of classes
+                expected_classes = len(labels_local) if isinstance(labels_local, (list, dict)) else 7
+                if len(probs) != expected_classes:
+                    app.logger.warning(f"Model output has {len(probs)} classes but labels have {expected_classes}. Labels: {labels_local}")
+                    print(f"[WARNING] Model output shape mismatch: {len(probs)} classes vs {expected_classes} labels")
+
+                idx = int(np.argmax(probs))
+                confidence = float(probs[idx])
+                
+                # Debug: Log all prediction probabilities to understand model behavior
+                all_probs = {}
+                for i in range(len(probs)):
+                    if isinstance(labels_local, list) and i < len(labels_local):
+                        all_probs[labels_local[i]] = float(probs[i])
+                    elif isinstance(labels_local, dict):
+                        label_key = str(i) if str(i) in labels_local else i if i in labels_local else f"class_{i}"
+                        all_probs[label_key] = float(probs[i])
+                    else:
+                        all_probs[str(i)] = float(probs[i])
+                
+                # Sort by probability (highest first) for easier debugging
+                sorted_probs = sorted(all_probs.items(), key=lambda x: x[1], reverse=True)
+                app.logger.info(f"Prediction probabilities for {filename} (sorted): {sorted_probs}")
+                print(f"[DETECT] All emotion probabilities (sorted by confidence):")
+                for emotion, prob in sorted_probs:
+                    marker = " <-- SELECTED" if emotion == (labels_local[idx] if isinstance(labels_local, list) and idx < len(labels_local) else str(idx)) else ""
+                    print(f"  {emotion}: {prob:.3f}{marker}")
+                print(f"[DETECT] Predicted emotion index: {idx}, confidence: {confidence:.3f}")
+                print(f"[DETECT] Available labels: {labels_local}")
+
+                # Resolve label safely
+                if isinstance(labels_local, dict):
+                    emotion = labels_local.get(str(idx)) or labels_local.get(idx) or list(labels_local.values())[idx]
+                elif isinstance(labels_local, list):
+                    emotion = labels_local[idx] if 0 <= idx < len(labels_local) else str(idx)
+                else:
+                    emotion = str(idx)
+                
+                print(f"[DETECT] Mapped emotion label: {emotion}")
 
             # Save image even for low confidence (for debugging/analysis)
             images_dir = app.config.get("IMAGES_DIR", IMAGES_DIR_DEFAULT)
@@ -496,10 +592,25 @@ def create_app(config: dict | None = None):
             except Exception:
                 app.logger.exception("Failed to log prediction to DB")
 
+            # Return all probabilities for debugging (frontend can use this to show top emotions)
+            all_emotion_probs = {}
+            if model_type == "vit":
+                # For ViT, all_probs already contains the dict
+                all_emotion_probs = {k: round(v, 4) for k, v in all_probs.items()}
+            else:
+                # For Keras, build from probs array
+                for i in range(len(probs)):
+                    if isinstance(labels_local, list) and i < len(labels_local):
+                        all_emotion_probs[labels_local[i]] = round(float(probs[i]), 4)
+                    elif isinstance(labels_local, dict):
+                        label_key = str(i) if str(i) in labels_local else i if i in labels_local else f"class_{i}"
+                        all_emotion_probs[label_key] = round(float(probs[i]), 4)
+            
             return jsonify({
                 "emotion": emotion,
                 "confidence": round(confidence, 3),
                 "filename": stored_filename or used_filename,
+                "all_probabilities": all_emotion_probs,  # Include all probabilities for debugging
             }), 200
 
         except (ValidationError, APIError, NotFoundError, ServiceUnavailableError) as exc:

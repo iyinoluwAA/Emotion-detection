@@ -58,7 +58,17 @@ export function StatsGrid({ items = [] as Item[] }: { items?: Item[] }) {
   });
   return (
     <div className={classes.root}>
-      <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing={{ base: "sm", md: "md" }}>
+      <SimpleGrid 
+        cols={{ 
+          base: 2,    // Mobile: 2 columns (more compact)
+          xs: 3,      // Small tablets: 3 columns
+          sm: 4,      // Tablets: 4 columns
+          md: 4,      // Desktop: 4 columns (keeps it compact)
+          lg: 4,      // Large desktop: 4 columns (prevents stretching)
+        }} 
+        spacing={{ base: "xs", sm: "sm", md: "md" }}
+        verticalSpacing={{ base: "xs", sm: "sm" }}
+      >
         {stats}
       </SimpleGrid>
     </div>

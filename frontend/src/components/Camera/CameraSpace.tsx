@@ -1,5 +1,5 @@
-import React, { useRef, useState } from "react";
-import { Button, Group, Card, Text, Box, Title, Stack, Badge } from "@mantine/core";
+import React, { useRef, useState, useEffect } from "react";
+import { Button, Group, Card, Text, Box, Title, Stack, Badge, Image } from "@mantine/core";
 import { IconCamera, IconUpload, IconVideo, IconVideoOff } from "@tabler/icons-react";
 import { ButtonProgress, Status } from "@/components/Buttons/ButtonProgress";
 import { ButtonMenu } from "@/components/Buttons/ButtonMenu";
@@ -21,6 +21,8 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<Status>("idle");
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null); // Image preview during prediction
+  const previewImageUrlRef = useRef<string | null>(null); // Ref to track current preview URL for cleanup
 
   async function startCamera() {
     try {
@@ -45,6 +47,16 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
     setStreaming(false);
   }
 
+  // Cleanup: Revoke object URLs when component unmounts
+  useEffect(() => {
+    return () => {
+      if (previewImageUrlRef.current) {
+        URL.revokeObjectURL(previewImageUrlRef.current);
+        previewImageUrlRef.current = null;
+      }
+    };
+  }, []);
+
   function captureFrameBlob(): Promise<Blob | null> {
     const video = videoRef.current;
     if (!video) {return Promise.resolve(null)};
@@ -67,12 +79,28 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
     try {
       const blob = await captureFrameBlob();
       if (!blob) {throw new Error("No capture available")};
+      
+      // Show captured image in preview
+      const imageUrl = URL.createObjectURL(blob);
+      setPreviewImageUrl(imageUrl);
+      previewImageUrlRef.current = imageUrl;
+      
+      // Stop camera stream to show the captured image
+      stopCamera();
+      
       setProgress(20);
       await submitAndTrack(blob, "capture.jpg");
     } catch (err) {
       console.error(err);
       setStatus("error");
       setProgress(0);
+      // Clear preview on error
+      const currentUrl = previewImageUrlRef.current;
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+        previewImageUrlRef.current = null;
+        setPreviewImageUrl(null);
+      }
       setTimeout(() => setStatus("idle"), 2000);
     }
   }
@@ -82,12 +110,31 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
     setSelectedFileName(file.name);
     setStatus("loading");
     setProgress(5);
+    
+    // Show uploaded image in preview
+    const imageUrl = URL.createObjectURL(file);
+    setPreviewImageUrl(imageUrl);
+    previewImageUrlRef.current = imageUrl;
+    
+    // Stop camera stream if active to show the uploaded image
+    if (streaming) {
+      stopCamera();
+    }
+    
     try {
       await submitAndTrack(file, file.name);
     } catch (err) {
       console.error(err);
       setStatus("error");
       setProgress(0);
+      setSelectedFileName(null); // Clear filename on error
+      // Clear preview on error
+      const currentUrl = previewImageUrlRef.current;
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+        previewImageUrlRef.current = null;
+        setPreviewImageUrl(null);
+      }
       setTimeout(() => setStatus("idle"), 2000);
     } finally {
       // clear file input so same file can be re-selected
@@ -104,7 +151,18 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
       setProgress(100);
       setStatus("success");
       onRefreshLogs && (await onRefreshLogs());
-      setTimeout(() => setSelectedFileName(null), 5000);
+      
+      // Clear preview image after successful prediction (with a short delay to show success)
+      setTimeout(() => {
+        const currentUrl = previewImageUrlRef.current;
+        if (currentUrl) {
+          URL.revokeObjectURL(currentUrl);
+          previewImageUrlRef.current = null;
+          setPreviewImageUrl(null);
+        }
+        setSelectedFileName(null);
+      }, 1500); // Show success for 1.5 seconds, then clear
+      
       setTimeout(() => {
         setProgress(0);
         setStatus("idle");
@@ -112,7 +170,15 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
     } catch (err) {
       setStatus("error");
       setProgress(0);
-      throw err;
+      setSelectedFileName(null); // Clear filename on error to stop "loading silently"
+      // Clear preview on error
+      const currentUrl = previewImageUrlRef.current;
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+        previewImageUrlRef.current = null;
+        setPreviewImageUrl(null);
+      }
+      throw err; // Re-throw so handleUploadFile can catch it
     }
   }
 
@@ -142,22 +208,38 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
             overflow: "hidden",
             position: "relative",
             border: "2px solid var(--mantine-color-gray-3)",
-            boxShadow: streaming ? "0 0 20px rgba(34, 139, 34, 0.3)" : "0 2px 8px rgba(0,0,0,0.1)",
+            boxShadow: streaming ? "0 0 20px rgba(34, 139, 34, 0.3)" : previewImageUrl ? "0 0 20px rgba(59, 130, 246, 0.3)" : "0 2px 8px rgba(0,0,0,0.1)",
             transition: "box-shadow 0.3s ease",
           }}
         >
+          {/* Show preview image if available (during prediction) */}
+          {previewImageUrl && (
+            <Image
+              src={previewImageUrl}
+              alt="Preview"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+              }}
+            />
+          )}
+          
+          {/* Show video stream if no preview image and streaming */}
           <video
             ref={videoRef}
             style={{
               width: "100%",
               height: "100%",
               objectFit: "cover",
-              display: streaming ? "block" : "none",
+              display: streaming && !previewImageUrl ? "block" : "none",
             }}
             muted
           />
           <canvas ref={canvasRef} style={{ display: "none" }} />
-          {!streaming && (
+          
+          {/* Show placeholder if no preview, no video, and not loading */}
+          {!streaming && !previewImageUrl && status === "idle" && (
             <Box
               style={{
                 position: "absolute",
@@ -176,6 +258,25 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
               </Text>
               <Text size="xs" c="dimmed">
                 Click "Start camera" to begin
+              </Text>
+            </Box>
+          )}
+          
+          {/* Show loading overlay during prediction */}
+          {previewImageUrl && status === "loading" && (
+            <Box
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(0, 0, 0, 0.5)",
+                backdropFilter: "blur(2px)",
+              }}
+            >
+              <Text size="lg" fw={600} c="white">
+                Analyzing emotion...
               </Text>
             </Box>
           )}

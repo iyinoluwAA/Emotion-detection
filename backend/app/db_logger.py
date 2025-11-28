@@ -210,6 +210,36 @@ def tail_rows(db_path: str, limit: int = 10, offset: int = 0, emotion_filter: Op
         raise
 
 
+def delete_prediction(db_path: str, prediction_id: int) -> bool:
+    """
+    Delete a prediction by ID.
+    
+    Args:
+        db_path: Path to SQLite database
+        prediction_id: ID of prediction to delete
+    
+    Returns:
+        True if deleted, False otherwise
+    """
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM predictions WHERE id = ?", (prediction_id,))
+        conn.commit()
+        return cur.rowcount > 0
+    except Exception:
+        with _db_lock:
+            thread_id = threading.get_ident()
+            key = f"{db_path}_{thread_id}"
+            if key in _connection_pool:
+                try:
+                    _connection_pool[key].close()
+                except:
+                    pass
+                del _connection_pool[key]
+        raise
+
+
 def get_total_count(db_path: str, emotion_filter: Optional[str] = None,
                    min_confidence: Optional[float] = None, max_confidence: Optional[float] = None,
                    date_from: Optional[str] = None, date_to: Optional[str] = None) -> int:

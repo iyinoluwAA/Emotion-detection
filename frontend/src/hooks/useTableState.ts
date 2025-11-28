@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 
 type Row = {
   image: string;
@@ -78,6 +78,14 @@ export function useTableState(rows: Row[], pageSize = 10) {
 
   // Pagination
   const totalPages = Math.ceil(filteredRows.length / pageSizeState);
+  
+  // Auto-adjust current page if it's out of bounds (e.g., after deletion)
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+  
   const paginatedRows = useMemo(() => {
     const start = (currentPage - 1) * pageSizeState;
     const end = start + pageSizeState;

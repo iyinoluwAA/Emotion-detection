@@ -22,7 +22,7 @@ def preprocess_face(
     image_path: str,
     target_size: Tuple[int, int] = (48, 48),
     detect_max_dim: int = 800,
-    pad_ratio: float = 0.15,
+    pad_ratio: float = 0.25,  # Increased from 0.15 to 0.25 to preserve more context (eyes, eyebrows, mouth area)
 ) -> Tuple[Optional[np.ndarray], Optional[str]]:
     """
     Load an image at image_path, detect a face and return a preprocessed array:
@@ -61,27 +61,72 @@ def preprocess_face(
         # Try to enhance small image for better detection on blurry photos
         small_enh = _enhance_for_detection(small)
 
-        # Cascade (built-in). Using standard frontal face cascade.
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-
-        # Primary detection pass
-        faces = face_cascade.detectMultiScale(
-            small_enh,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(30, 30),
-            flags=cv2.CASCADE_SCALE_IMAGE,
-        )
-
-        # If nothing found, try a more permissive pass (helps blurry / odd-angle photos)
+        # Try multiple cascade classifiers for better detection
+        cascade_paths = [
+            "haarcascade_frontalface_default.xml",
+            "haarcascade_frontalface_alt.xml",
+            "haarcascade_frontalface_alt2.xml",
+        ]
+        
+        faces = []
+        
+        # Try each cascade with progressively more permissive parameters
+        for cascade_name in cascade_paths:
+            if len(faces) > 0:
+                break
+                
+            try:
+                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + cascade_name)
+                if face_cascade.empty():
+                    continue
+                
+                # Attempt 1: Standard detection
+                faces = face_cascade.detectMultiScale(
+                    small_enh,
+                    scaleFactor=1.1,
+                    minNeighbors=5,
+                    minSize=(30, 30),
+                    flags=cv2.CASCADE_SCALE_IMAGE,
+                )
+                
+                # Attempt 2: More permissive (helps blurry / odd-angle photos)
+                if len(faces) == 0:
+                    faces = face_cascade.detectMultiScale(
+                        small_enh,
+                        scaleFactor=1.05,
+                        minNeighbors=3,
+                        minSize=(20, 20),
+                        flags=cv2.CASCADE_SCALE_IMAGE,
+                    )
+                
+                # Attempt 3: Even more permissive (for challenging conditions)
+                if len(faces) == 0:
+                    faces = face_cascade.detectMultiScale(
+                        small_enh,
+                        scaleFactor=1.03,
+                        minNeighbors=2,
+                        minSize=(15, 15),
+                        flags=cv2.CASCADE_SCALE_IMAGE,
+                    )
+                    
+            except Exception:
+                continue
+        
+        # If still nothing, try on original (non-enhanced) image
         if len(faces) == 0:
-            faces = face_cascade.detectMultiScale(
-                small_enh,
-                scaleFactor=1.05,
-                minNeighbors=3,
-                minSize=(20, 20),
-                flags=cv2.CASCADE_SCALE_IMAGE,
-            )
+            try:
+                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+                if not face_cascade.empty():
+                    # Sometimes enhancement hurts detection, try original
+                    faces = face_cascade.detectMultiScale(
+                        small,
+                        scaleFactor=1.05,
+                        minNeighbors=3,
+                        minSize=(20, 20),
+                        flags=cv2.CASCADE_SCALE_IMAGE,
+                    )
+            except Exception:
+                pass
 
         if len(faces) == 0:
             return None, None
@@ -107,7 +152,8 @@ def preprocess_face(
         face_crop = gray_full[y1:y2, x1:x2]
 
         # final resize to model input
-        face_resized = cv2.resize(face_crop, (target_size[1], target_size[0]), interpolation=cv2.INTER_AREA)
+        # Use INTER_CUBIC for better quality when upscaling small faces (preserves more detail for emotion recognition)
+        face_resized = cv2.resize(face_crop, (target_size[1], target_size[0]), interpolation=cv2.INTER_CUBIC)
 
         # ensure numeric ndarray and float32 dtype
         face_arr = np.asarray(face_resized, dtype=np.float32)

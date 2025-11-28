@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
-import { Anchor, Group, Progress, Table, Text, Image, Modal, Badge, Tooltip, Box, ActionIcon } from "@mantine/core";
-import { IconPhoto, IconArrowUp, IconArrowDown, IconArrowsSort } from "@tabler/icons-react";
+import { Anchor, Group, Progress, Table, Text, Image, Modal, Badge, Tooltip, Box, ActionIcon, Button, TextInput } from "@mantine/core";
+import { IconPhoto, IconArrowUp, IconArrowDown, IconArrowsSort, IconTrash } from "@tabler/icons-react";
 import classes from "./TableReviews.module.css";
 import { getImageUrl } from "@/api/config";
 import { CONSTANTS } from "@/constants";
@@ -9,6 +9,7 @@ import { getEmotionColor } from "@/utils/emotionColors";
 import { EmptyState } from "@/components/EmptyState/EmptyState";
 
 type Row = {
+  id?: number;
   image: string;
   imageUrl?: string;
   emotions?: string;
@@ -19,11 +20,20 @@ type Row = {
 type SortField = "timestamp" | "emotion" | "confidence" | null;
 type SortDirection = "asc" | "desc";
 
-export function TableReviews({ rows = [] as Row[] }: { rows?: Row[] }) {
+type Props = {
+  rows?: Row[];
+  onDelete?: (id: number) => Promise<void>;
+};
+
+export function TableReviews({ rows = [] as Row[], onDelete }: Props) {
   const [opened, setOpened] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ url: string; filename: string; emotion?: string } | null>(null);
   const [sortField, setSortField] = useState<SortField>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [deleteConfirmOpened, setDeleteConfirmOpened] = useState(false);
+  const [rowToDelete, setRowToDelete] = useState<Row | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
 
   const sortedRows = useMemo(() => {
     if (!sortField) return rows;
@@ -201,9 +211,46 @@ export function TableReviews({ rows = [] as Row[] }: { rows?: Row[] }) {
             <Progress.Section className={classes.progressSection} value={negative} color="red" />
           </Progress.Root>
         </Table.Td>
+        <Table.Td>
+          {onDelete && row.id && (
+            <ActionIcon
+              color="red"
+              variant="light"
+              onClick={() => {
+                setRowToDelete(row);
+                setDeleteConfirmInput("");
+                setDeleteConfirmOpened(true);
+              }}
+              title="Delete prediction"
+            >
+              <IconTrash size={16} />
+            </ActionIcon>
+          )}
+        </Table.Td>
       </Table.Tr>
     );
   });
+
+  const handleConfirmDelete = async () => {
+    if (!rowToDelete?.id || !onDelete) return;
+
+    // Validate input matches image name
+    if (deleteConfirmInput.trim() !== rowToDelete.image.trim()) {
+      return; // Button is disabled, but double-check
+    }
+    
+    setDeleting(true);
+    try {
+      await onDelete(rowToDelete.id);
+      setDeleteConfirmOpened(false);
+      setRowToDelete(null);
+      setDeleteConfirmInput("");
+    } catch (error) {
+      console.error("Failed to delete:", error);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <>
@@ -236,6 +283,7 @@ export function TableReviews({ rows = [] as Row[] }: { rows?: Row[] }) {
                   </Group>
                 </Table.Th>
                 <Table.Th style={{ minWidth: 180 }}>Distribution</Table.Th>
+                {onDelete && <Table.Th style={{ minWidth: 80 }}>Actions</Table.Th>}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>{trs}</Table.Tbody>
@@ -268,6 +316,89 @@ export function TableReviews({ rows = [] as Row[] }: { rows?: Row[] }) {
             fallbackSrc="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%23ddd' width='400' height='300'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' fill='%23999'%3EImage not available%3C/text%3E%3C/svg%3E"
           />
         )}
+      </Modal>
+
+      <Modal
+        opened={deleteConfirmOpened}
+        onClose={() => {
+          if (!deleting) {
+            setDeleteConfirmOpened(false);
+            setRowToDelete(null);
+            setDeleteConfirmInput("");
+          }
+        }}
+        title="Delete Prediction"
+        centered
+      >
+        <Text mb="md">
+          Are you sure you want to delete this prediction? This action cannot be undone.
+        </Text>
+        {rowToDelete && (
+          <>
+            <Group gap="xs" mb="md">
+              <Text fw={500}>Image:</Text>
+              <Text c="dimmed">{rowToDelete.image}</Text>
+            </Group>
+            <TextInput
+              label={`Type "${rowToDelete.image}" to confirm deletion`}
+              placeholder={rowToDelete.image}
+              value={deleteConfirmInput}
+              onChange={(e) => setDeleteConfirmInput(e.target.value)}
+              mb="xl"
+              styles={{
+                input: {
+                  border: deleteConfirmInput.trim() === rowToDelete.image.trim()
+                    ? '2px solid rgba(34, 197, 94, 0.6)'
+                    : deleteConfirmInput.trim() !== ""
+                    ? '2px solid rgba(239, 68, 68, 0.6)'
+                    : undefined,
+                  backgroundColor: deleteConfirmInput.trim() === rowToDelete.image.trim()
+                    ? 'rgba(34, 197, 94, 0.05)'
+                    : deleteConfirmInput.trim() !== ""
+                    ? 'rgba(239, 68, 68, 0.05)'
+                    : undefined,
+                  transition: 'all 0.2s ease',
+                },
+              }}
+              error={
+                deleteConfirmInput.trim() !== "" &&
+                deleteConfirmInput.trim() !== rowToDelete.image.trim()
+                  ? `Please type "${rowToDelete.image}" exactly`
+                  : null
+              }
+            />
+          </>
+        )}
+        <Group justify="flex-end" mt="xl">
+          <Button
+            variant="subtle"
+            onClick={() => {
+              setDeleteConfirmOpened(false);
+              setRowToDelete(null);
+              setDeleteConfirmInput("");
+            }}
+            disabled={deleting}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="red"
+            onClick={handleConfirmDelete}
+            loading={deleting}
+            disabled={!rowToDelete || deleteConfirmInput.trim() !== rowToDelete.image.trim()}
+            styles={{
+              root: {
+                background: deleteConfirmInput.trim() === rowToDelete?.image.trim()
+                  ? undefined
+                  : 'rgba(239, 68, 68, 0.3)',
+                transition: 'all 0.2s ease',
+              },
+            }}
+            leftSection={<IconTrash size={16} />}
+          >
+            Delete
+          </Button>
+        </Group>
       </Modal>
     </>
   );

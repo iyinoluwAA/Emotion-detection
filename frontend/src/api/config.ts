@@ -3,8 +3,26 @@
  * All API endpoints and base URL configuration should be defined here
  */
 
+// Determine API URL based on environment
+// In development (localhost), use local backend
+// In production, use Render backend
+const getBaseUrl = (): string => {
+  // If VITE_API_URL is explicitly set, use it
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // In development (localhost), use local backend
+  if (import.meta.env.DEV || import.meta.env.MODE === 'development') {
+    return "http://localhost:5000";
+  }
+  
+  // Production default: Render backend
+  return "https://emotion-detection-1-8avi.onrender.com";
+};
+
 export const API_CONFIG = {
-  baseUrl: import.meta.env.VITE_API_URL || "https://emotion-detection-1-8avi.onrender.com",
+  baseUrl: getBaseUrl(),
   endpoints: {
     detect: "/detect",
     logs: "/logs",

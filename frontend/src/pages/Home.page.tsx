@@ -12,7 +12,7 @@ import { StatsRingCard } from "@/components/StatsRingCard/StatsRingCard";
 import { TableControls } from "@/components/TableControls/TableControls";
 import { EmotionCharts } from "@/components/EmotionCharts/EmotionCharts";
 import { uploadImage } from "@/api/client";
-import { getImageUrl } from "@/api/config";
+import { getImageUrl, getApiBaseUrl } from "@/api/config";
 import { useLogs, type LogRow } from "@/hooks/useLogs";
 import { useMetrics, type Metrics } from "@/hooks/useMetrics";
 import { useTableState } from "@/hooks/useTableState";
@@ -25,6 +25,7 @@ import { ErrorState } from "@/components/ErrorState/ErrorState";
 import { exportToCSV, exportToJSON } from "@/utils/export";
 
 type TableRow = {
+  id?: number;
   image: string;
   imageUrl?: string;
   emotions?: string;
@@ -112,6 +113,68 @@ export function HomePage() {
     });
   }, []);
 
+  const handleDeletePrediction = useCallback(
+    async (id: number) => {
+      if (useMockData) {
+        notifications.show({
+          title: "Delete Disabled",
+          message: "Cannot delete in mock data mode",
+          color: "orange",
+        });
+        return;
+      }
+
+      if (!backendHealth.isOnline) {
+        notifications.show({
+          title: "Delete Disabled",
+          message: "Backend is offline. Please try again when connection is restored.",
+          color: "orange",
+        });
+        return;
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
+        const response = await fetch(`${getApiBaseUrl()}/logs/${id}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to delete: ${response.status}`);
+        }
+
+        // Refresh logs and metrics in parallel (React 18 auto-batches these)
+        // No need for delays - they cause the visible "refresh" effect
+        await Promise.all([
+          fetchLogs(CONSTANTS.DEFAULT_LOG_LIMIT),
+          refreshMetrics(),
+        ]);
+
+        notifications.show({
+          title: "Prediction Deleted",
+          message: "The prediction has been successfully deleted.",
+          color: "teal",
+        });
+      } catch (error) {
+        console.error("Failed to delete prediction:", error);
+        notifications.show({
+          title: "Delete Failed",
+          message: error instanceof Error ? error.message : "Failed to delete prediction",
+          color: "red",
+        });
+        throw error; // Re-throw so TableReviews can handle it
+      }
+    },
+    [fetchLogs, refreshMetrics, backendHealth.isOnline, useMockData]
+  );
+
   const tableRows: TableRow[] = useMemo(() => {
     return logs.map((l) => {
       const conf = typeof l.confidence === "number" ? Math.round((l.confidence ?? 0) * 100) : 0;
@@ -133,6 +196,7 @@ export function HomePage() {
       }
       
       return {
+        id: l.id,
         image: imageFilename ?? "upload",
         imageUrl,
         emotions: l.emotion ?? "-",
@@ -434,7 +498,7 @@ export function HomePage() {
                     filteredResults={tableState.filteredRows.length}
                   />
 
-                  <TableReviews rows={tableState.paginatedRows} />
+                  <TableReviews rows={tableState.paginatedRows} onDelete={handleDeletePrediction} />
 
                   {tableState.totalPages > 1 && (
                     <Group justify="space-between" wrap="wrap">
