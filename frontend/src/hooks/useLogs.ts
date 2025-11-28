@@ -6,6 +6,7 @@ export type LogRow = {
   id?: number;
   ts?: string;
   filename?: string;
+  image_path?: string;  // Stored image filename from backend (e.g., "abc123_capture.jpg")
   emotion?: string;
   confidence?: number;
 };

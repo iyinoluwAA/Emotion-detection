@@ -13,7 +13,7 @@ import { TableControls } from "@/components/TableControls/TableControls";
 import { EmotionCharts } from "@/components/EmotionCharts/EmotionCharts";
 import { uploadImage } from "@/api/client";
 import { getImageUrl } from "@/api/config";
-import { useLogs } from "@/hooks/useLogs";
+import { useLogs, type LogRow } from "@/hooks/useLogs";
 import { useMetrics, type Metrics } from "@/hooks/useMetrics";
 import { useTableState } from "@/hooks/useTableState";
 import { useBackendHealth } from "@/hooks/useBackendHealth";
@@ -73,11 +73,11 @@ export function HomePage() {
         const json = await uploadImage(file, filename);
         notifications.show({
           title: "Success",
-          message: "Image uploaded and analyzed successfully",
+          message: `Emotion detected: ${json.emotion} (${Math.round((json.confidence || 0) * 100)}% confidence)`,
           color: "teal",
         });
         
-        // Refresh data after successful upload
+        // Refresh data after successful upload to get the stored image_path
         try {
           await fetchLogs(CONSTANTS.DEFAULT_LOG_LIMIT);
         } catch (err) {
@@ -115,20 +115,32 @@ export function HomePage() {
   const tableRows: TableRow[] = useMemo(() => {
     return logs.map((l) => {
       const conf = typeof l.confidence === "number" ? Math.round((l.confidence ?? 0) * 100) : 0;
-      const imageUrl = useMockData && l.filename
-        ? getMockImageUrl(l.filename)
-        : l.filename
-        ? getImageUrl(l.filename)
-        : undefined;
+      // Use image_path if available (from backend storage), otherwise fallback to filename
+      // Backend returns image_path as the stored filename, or filename as original name
+      const logRow = l as LogRow; // Type assertion for image_path
+      const imageFilename = logRow.image_path || logRow.filename;
+      
+      // Construct image URL - prioritize image_path (stored filename) over original filename
+      let imageUrl: string | undefined = undefined;
+      if (useMockData && l.filename) {
+        imageUrl = getMockImageUrl(l.filename);
+      } else if (imageFilename) {
+        // Use image_path if available (stored filename), otherwise try filename
+        // Only exclude if it's literally "upload" (placeholder)
+        if (imageFilename !== "upload" && imageFilename.trim() !== "") {
+          imageUrl = getImageUrl(imageFilename);
+        }
+      }
+      
       return {
-        image: l.filename ?? "upload",
+        image: imageFilename ?? "upload",
         imageUrl,
         emotions: l.emotion ?? "-",
         timestamp: l.ts ?? "-",
         reviews: { positive: conf, negative: Math.max(0, 100 - conf) },
       };
     });
-  }, [logs]);
+  }, [logs, useMockData]);
 
   // Table state management (search, filter, pagination)
   const tableState = useTableState(tableRows, 10);
