@@ -2,7 +2,10 @@
 import os
 import cv2
 import numpy as np
+import logging
 from typing import Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 def _calculate_brightness(gray: np.ndarray) -> float:
     """
@@ -92,11 +95,18 @@ def preprocess_face(
     - (face_array, used_filename)
     """
     try:
+        # Check if file exists
+        if not os.path.exists(image_path):
+            logger.warning(f"Image file does not exist: {image_path}")
+            return None, None
+        
         img = cv2.imread(image_path)
         if img is None:
+            logger.warning(f"Failed to load image with cv2.imread: {image_path}")
             return None, None
 
         h0, w0 = img.shape[:2]
+        logger.debug(f"Loaded image: {image_path}, size: {w0}x{h0}")
         # grayscale copy for detection
         gray_full = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -267,33 +277,67 @@ def preprocess_face(
         # Last resort: if no face detected, try using center crop of image
         # This handles cases where face detection fails but there's clearly a face
         if len(faces) == 0:
+            logger.info(f"No face detected with all methods, trying center crop fallback for {image_path} (image size: {w0}x{h0})")
+            
             # Try center crop - assume face is in center 60% of image
+            # Make sure we have valid dimensions
+            if w0 < 48 or h0 < 48:
+                logger.warning(f"Image too small for center crop: {w0}x{h0}")
+                return None, None
+            
+            crop_w = max(48, int(w0 * 0.6))
+            crop_h = max(48, int(h0 * 0.6))
             center_x, center_y = w0 // 2, h0 // 2
-            crop_w = int(w0 * 0.6)
-            crop_h = int(h0 * 0.6)
             x1 = max(0, center_x - crop_w // 2)
             y1 = max(0, center_y - crop_h // 2)
             x2 = min(w0, x1 + crop_w)
             y2 = min(h0, y1 + crop_h)
             
-            # Only use center crop if image is reasonably sized (not too small)
-            if crop_w >= 48 and crop_h >= 48:
-                face_crop = gray_full[y1:y2, x1:x2]
-                face_resized = cv2.resize(face_crop, (target_size[1], target_size[0]), interpolation=cv2.INTER_AREA)
-                face_arr = np.asarray(face_resized, dtype=np.float32)
-                face_arr = face_arr / 255.0
-                
-                if face_arr.ndim == 2:
-                    face_arr = np.expand_dims(face_arr, axis=-1)
-                face_arr = np.expand_dims(face_arr, axis=0)
-                
-                if face_arr.dtype != np.float32:
-                    face_arr = face_arr.astype(np.float32)
-                if np.isfinite(face_arr).all():
+            # Ensure we have valid crop dimensions
+            actual_crop_w = x2 - x1
+            actual_crop_h = y2 - y1
+            
+            logger.debug(f"Center crop: ({x1}, {y1}) to ({x2}, {y2}), actual size: {actual_crop_w}x{actual_crop_h}")
+            
+            if actual_crop_w >= 48 and actual_crop_h >= 48:
+                try:
+                    face_crop = gray_full[y1:y2, x1:x2]
+                    if face_crop.size == 0 or face_crop.shape[0] == 0 or face_crop.shape[1] == 0:
+                        logger.warning(f"Center crop resulted in empty or invalid array for {image_path}")
+                        return None, None
+                    
+                    logger.debug(f"Center crop successful, resizing from {face_crop.shape} to {target_size}")
+                    face_resized = cv2.resize(face_crop, (target_size[1], target_size[0]), interpolation=cv2.INTER_AREA)
+                    
+                    if face_resized.size == 0:
+                        logger.warning(f"Resized face is empty for {image_path}")
+                        return None, None
+                    
+                    face_arr = np.asarray(face_resized, dtype=np.float32)
+                    face_arr = face_arr / 255.0
+                    
+                    if face_arr.ndim == 2:
+                        face_arr = np.expand_dims(face_arr, axis=-1)
+                    face_arr = np.expand_dims(face_arr, axis=0)
+                    
+                    if face_arr.dtype != np.float32:
+                        face_arr = face_arr.astype(np.float32)
+                    
+                    if not np.isfinite(face_arr).all():
+                        logger.warning(f"Center crop resulted in non-finite values for {image_path}")
+                        return None, None
+                    
+                    logger.info(f"Successfully using center crop fallback for {image_path}, final shape: {face_arr.shape}")
                     used_filename = os.path.basename(image_path) or "upload.jpg"
                     return face_arr, used_filename
+                except Exception as e:
+                    logger.exception(f"Error in center crop fallback for {image_path}: {e}")
+                    return None, None
+            else:
+                logger.warning(f"Center crop dimensions too small: {actual_crop_w}x{actual_crop_h} (min: 48x48)")
             
             # If center crop also fails, return None
+            logger.warning(f"All face detection methods failed for {image_path}")
             return None, None
 
         # Choose the largest detected face (usually the main subject)
@@ -343,6 +387,7 @@ def preprocess_face(
         used_filename = os.path.basename(image_path) or "upload.jpg"
         return face_arr, used_filename
 
-    except Exception:
-        # don't leak internals to caller; let app log exceptions if needed
+    except Exception as e:
+        # Log the exception for debugging
+        logger.exception(f"Exception in preprocess_face for {image_path}: {e}")
         return None, None

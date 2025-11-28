@@ -361,7 +361,18 @@ def create_app(config: dict | None = None):
         used_filename = filename
 
         try:
+            # Save file and verify it was saved
             file.save(tmp_path)
+            if not os.path.exists(tmp_path):
+                app.logger.error("Failed to save uploaded file to %s", tmp_path)
+                raise ValidationError("Failed to save uploaded image")
+            
+            file_size = os.path.getsize(tmp_path)
+            if file_size == 0:
+                app.logger.error("Saved file is empty: %s", tmp_path)
+                raise ValidationError("Uploaded image is empty")
+            
+            app.logger.info("Saved file: %s, size: %d bytes", tmp_path, file_size)
 
             # Preprocess face - preprocess_face is imported above in factory scope
             res = preprocess_face(tmp_path)
@@ -371,7 +382,7 @@ def create_app(config: dict | None = None):
                 face_array = res
 
             if face_array is None:
-                app.logger.info("No face detected for file %s", filename)
+                app.logger.warning("No face detected for file %s (size: %d bytes, path: %s)", filename, file_size, tmp_path)
                 raise ValidationError("No face detected in image")
 
             # Defensive conversion and validations
