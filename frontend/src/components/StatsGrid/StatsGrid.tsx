@@ -7,34 +7,17 @@ type Item = { title: string; value: string; diff?: number };
 export function StatsGrid({ items = [] as Item[] }: { items?: Item[] }) {
   const stats = items.map((stat) => {
     return (
-      <Paper withBorder p="md" radius="md" key={stat.title} style={{ minWidth: 0, overflow: "hidden" }}>
-        <Group justify="space-between" wrap="nowrap" gap="xs">
-          <Text 
-            size="xs" 
-            c="dimmed" 
-            className={classes.title}
-            style={{ 
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              flex: 1,
-              minWidth: 0,
-            }}
-          >
-            {stat.title}
-          </Text>
-        </Group>
+      <Paper withBorder p="md" radius="md" key={stat.title} style={{ minWidth: 0 }}>
+        <Text 
+          size="xs" 
+          c="dimmed" 
+          className={classes.title}
+        >
+          {stat.title}
+        </Text>
 
         <Group align="flex-end" gap="xs" mt={25} wrap="nowrap">
-          <Text 
-            className={classes.value}
-            style={{ 
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              minWidth: 0,
-            }}
-          >
+          <Text className={classes.value}>
             {stat.value}
           </Text>
           {typeof stat.diff !== "undefined" && (
@@ -50,16 +33,7 @@ export function StatsGrid({ items = [] as Item[] }: { items?: Item[] }) {
           )}
         </Group>
 
-        <Text 
-          fz="xs" 
-          c="dimmed" 
-          mt={7}
-          style={{ 
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
+        <Text fz="xs" c="dimmed" mt={7}>
           Compared to previous month
         </Text>
       </Paper>
