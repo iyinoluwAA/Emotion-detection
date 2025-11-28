@@ -82,7 +82,8 @@ export function TableReviews({ rows = [] as Row[] }: { rows?: Row[] }) {
   }
 
   const handleImageClick = (row: Row) => {
-    const imageUrl = row.imageUrl || getImageUrl(row.image);
+    // Try imageUrl first, then construct from image field
+    const imageUrl = row.imageUrl || (row.image && row.image !== "upload" ? getImageUrl(row.image) : null);
     if (imageUrl) {
       setSelectedImage({
         url: imageUrl,
@@ -90,6 +91,9 @@ export function TableReviews({ rows = [] as Row[] }: { rows?: Row[] }) {
         emotion: row.emotions,
       });
       setOpened(true);
+    } else {
+      // Log for debugging
+      console.warn("No image URL available for row:", row);
     }
   };
 
@@ -97,8 +101,9 @@ export function TableReviews({ rows = [] as Row[] }: { rows?: Row[] }) {
     const totalReviews = row.reviews.positive + row.reviews.negative;
     const positive = totalReviews > 0 ? (row.reviews.positive / totalReviews) * 100 : 0;
     const negative = totalReviews > 0 ? (row.reviews.negative / totalReviews) * 100 : 0;
-    const imageUrl = row.imageUrl || getImageUrl(row.image);
-    const hasImage = imageUrl && row.image !== "upload";
+    // Use provided imageUrl or construct from image field
+    const imageUrl = row.imageUrl || (row.image && row.image !== "upload" ? getImageUrl(row.image) : null);
+    const hasImage = imageUrl && row.image && row.image !== "upload" && row.image.trim() !== "";
 
     return (
       <Table.Tr key={row.image + (row.timestamp ?? "")} className={classes.tableRow}>
@@ -130,6 +135,10 @@ export function TableReviews({ rows = [] as Row[] }: { rows?: Row[] }) {
                     w={CONSTANTS.THUMBNAIL_SIZE}
                     h={CONSTANTS.THUMBNAIL_SIZE}
                     fit="cover"
+                    onError={(e) => {
+                      console.error("Failed to load image:", imageUrl, row);
+                      // Fallback handled by fallbackSrc
+                    }}
                     fallbackSrc="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect fill='%23ddd' width='80' height='80'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' fill='%23999' font-size='12'%3ENo Image%3C/text%3E%3C/svg%3E"
                   />
                 </Box>

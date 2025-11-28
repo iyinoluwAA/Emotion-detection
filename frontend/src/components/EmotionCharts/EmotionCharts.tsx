@@ -109,7 +109,7 @@ export function EmotionCharts({ data }: Props) {
         </Tabs.List>
 
         <Tabs.Panel value="distribution" pt="md">
-          <Box style={{ width: "100%", height: 400, minHeight: 400 }}>
+          <Box style={{ width: "100%", height: 400, minHeight: 400, display: "flex", justifyContent: "center", alignItems: "center" }}>
             <PieChart
               data={emotionDistribution}
               withTooltip
@@ -123,7 +123,7 @@ export function EmotionCharts({ data }: Props) {
 
         <Tabs.Panel value="trends" pt="md">
           {timeSeriesData.length > 0 ? (
-            <Box style={{ width: "100%", height: 400, minHeight: 400 }}>
+            <Box style={{ width: "100%", height: 400, minHeight: 400, display: "flex", justifyContent: "center", alignItems: "center" }}>
               <LineChart
                 h={300}
                 w="100%"
@@ -146,7 +146,7 @@ export function EmotionCharts({ data }: Props) {
         </Tabs.Panel>
 
         <Tabs.Panel value="confidence" pt="md">
-          <Box style={{ width: "100%", height: 400, minHeight: 400 }}>
+          <Box style={{ width: "100%", height: 400, minHeight: 400, display: "flex", justifyContent: "center", alignItems: "center" }}>
             <BarChart
               h={300}
               w="100%"
