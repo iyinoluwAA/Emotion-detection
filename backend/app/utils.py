@@ -298,6 +298,9 @@ def preprocess_face(
             except Exception:
                 pass
 
+        # Debug: Log how many faces were found
+        print(f"[FACE_DETECTION] Detection complete. Found {len(faces)} faces. Image size: {w0}x{h0}")
+        
         # Last resort: if no face detected, use fallback strategies
         # This handles cases where face detection fails but there's clearly a face
         if len(faces) == 0:
@@ -426,5 +429,8 @@ def preprocess_face(
 
     except Exception as e:
         # Log the exception for debugging
+        print(f"[FACE_DETECTION] EXCEPTION in preprocess_face for {image_path}: {type(e).__name__}: {e}")
+        import traceback
+        print(f"[FACE_DETECTION] Traceback:\n{traceback.format_exc()}")
         logger.exception(f"Exception in preprocess_face for {image_path}: {e}")
         return None, None
