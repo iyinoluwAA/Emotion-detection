@@ -1,62 +1,94 @@
-# Face Detection Improvements - Research Summary
+# Face Detection & Emotion Recognition Improvements - Research
 
 ## Key Findings
 
-### Low Light Detection Issues
-1. **Standard face detection fails in low light** - OpenCV's Haar cascades and DNN models struggle with poor lighting
-2. **Flashlight doesn't always help** - Can cause overexposure or uneven lighting
-3. **Preprocessing is critical** - Image enhancement before detection significantly improves accuracy
+### 1. Low Light Detection Issues
+**Problem**: Face detection fails or has low confidence in dark conditions, even with flashlight.
 
-### Best Practices for Low Light Face Detection
+**Solutions from Research**:
+- **Adaptive Histogram Equalization (CLAHE)**: Already implemented, but can be enhanced
+- **Gamma Correction**: Adjust brightness/contrast for very dark or very bright images
+- **Multi-scale Detection**: Try multiple detection scales more aggressively
+- **DNN-based Face Detection**: More robust than Haar cascades (MTCNN, RetinaFace)
+- **Brightness Normalization**: Normalize image brightness before detection
+- **Multiple Detection Attempts**: Try original, enhanced, and gamma-corrected versions
 
-#### 1. **Histogram Equalization**
-- **CLAHE (Contrast Limited Adaptive Histogram Equalization)**: Better than standard histogram equalization
-- Adapts to local image regions
-- Prevents over-amplification of noise
-- Improves contrast in both dark and bright areas
+### 2. Image Display Issues
+**Problem**: Images show "No Image" instead of actual captured images.
 
-#### 2. **Gamma Correction**
-- Adjusts brightness without losing detail
-- Formula: `output = input^(1/gamma)`
-- Gamma < 1: Brightens image
-- Gamma > 1: Darkens image
-- Adaptive gamma based on image brightness
+**Root Causes**:
+- Image filename not properly returned from backend
+- Image path not stored correctly in database
+- Frontend not constructing correct image URL
+- Images not being saved to storage
 
-#### 3. **Multi-Scale Detection**
-- Try multiple scales when detecting faces
-- Scale factors: 1.1, 1.2, 1.3
-- Improves detection in varying lighting conditions
+**Solutions**:
+- Ensure `image_path` is returned in `/detect` response
+- Verify images are saved before logging to database
+- Check frontend image URL construction
+- Add image modal for viewing full-size images
 
-#### 4. **Image Enhancement Pipeline**
-1. Convert to grayscale
-2. Apply CLAHE
-3. Apply adaptive gamma correction
-4. Optional: Bilateral filter for noise reduction
-5. Detect faces with multiple scales
+### 3. Accuracy Improvements
+**Research-Based Techniques**:
+- **Face Alignment**: Align faces to standard position (eyes level)
+- **Data Augmentation**: During preprocessing, apply slight variations
+- **Multi-crop Ensemble**: Crop face with multiple padding ratios and average predictions
+- **Confidence Threshold Tuning**: Lower threshold for low-light conditions
+- **Preprocessing Pipeline**: 
+  - Gamma correction for brightness
+  - CLAHE for contrast
+  - Gaussian blur reduction
+  - Sharpening for clarity
 
-#### 5. **Confidence Threshold Adjustment**
-- Lower confidence threshold for low light (0.3-0.4 instead of 0.5)
-- But validate with additional checks
+### 4. Better Face Detection in Various Lighting
+**Techniques**:
+1. **Gamma Correction**: `I_out = I_in^(1/gamma)` - brightens dark images
+2. **Histogram Equalization**: Global and adaptive (CLAHE)
+3. **Contrast Limited Adaptive Histogram Equalization (CLAHE)**: Already using, can tune parameters
+4. **Brightness Normalization**: Scale pixel values to optimal range
+5. **Multi-pass Detection**: Try detection on original, enhanced, and gamma-corrected versions
 
-### Implementation Strategy
+## Implementation Plan
 
-1. **Detect image brightness** - Calculate mean pixel value
-2. **Apply adaptive preprocessing** - More aggressive for darker images
-3. **Multi-scale face detection** - Try different scales
-4. **Post-process validation** - Ensure detected face is reasonable size/position
+### Phase 1: Enhanced Preprocessing (Immediate)
+- Add gamma correction for low-light images
+- Improve CLAHE parameters
+- Add brightness normalization
+- Multi-pass detection (try multiple preprocessing approaches)
 
-## Code Improvements
+### Phase 2: Better Face Detection (Short-term)
+- Consider DNN-based detection (MTCNN or RetinaFace) for better accuracy
+- Multi-scale detection with more aggressive parameters
+- Face alignment before emotion prediction
 
-### Current Issues
-- Single-scale detection
-- No brightness adaptation
-- No CLAHE or gamma correction
-- Fixed confidence threshold
+### Phase 3: Image Display Fixes (Immediate)
+- Fix image path storage and retrieval
+- Add image modal component
+- Verify image serving endpoint works
 
-### Proposed Improvements
-- Adaptive preprocessing based on image brightness
-- CLAHE for contrast enhancement
-- Gamma correction for brightness adjustment
-- Multi-scale face detection
-- Better error handling and logging
+### Phase 4: UI Improvements (Immediate)
+- Center charts
+- Add image click handlers
+- Improve image display in table
+
+## Technical Details
+
+### Gamma Correction Formula
+```python
+gamma = 0.5  # For dark images (brightens)
+gamma = 2.0  # For bright images (darkens)
+lookup_table = np.array([((i / 255.0) ** (1.0 / gamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
+corrected = cv2.LUT(image, lookup_table)
+```
+
+### Optimal CLAHE Parameters for Low Light
+- `clipLimit`: 3.0-4.0 (higher for darker images)
+- `tileGridSize`: (8, 8) or (16, 16) for better local adaptation
+
+### Multi-Pass Detection Strategy
+1. Try original image
+2. Try CLAHE enhanced
+3. Try gamma-corrected (gamma=0.5 for dark, 2.0 for bright)
+4. Try combination: gamma + CLAHE
+5. Use most confident detection
 
