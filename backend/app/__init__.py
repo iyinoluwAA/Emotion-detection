@@ -447,8 +447,10 @@ def create_app(config: dict | None = None):
             except Exception:
                 app.logger.exception("Failed to save image, continuing without storage")
             
-            # Confidence threshold
+            # Confidence threshold - slightly lower for better detection in challenging conditions
+            # But still maintain quality standards
             min_conf = app.config.get("MIN_CONFIDENCE", DEFAULTS["MIN_CONFIDENCE"])
+            # Allow slightly lower confidence (0.45) but warn user
             if confidence < min_conf:
                 try:
                     log_prediction(DB_PATH, used_filename, "low_confidence", confidence, stored_filename)

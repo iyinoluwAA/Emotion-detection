@@ -4,17 +4,68 @@ import cv2
 import numpy as np
 from typing import Optional, Tuple
 
+def _calculate_brightness(gray: np.ndarray) -> float:
+    """
+    Calculate mean brightness of the image.
+    Returns value between 0 (dark) and 255 (bright).
+    """
+    return float(np.mean(gray))
+
+
+def _gamma_correction(image: np.ndarray, gamma: float) -> np.ndarray:
+    """
+    Apply gamma correction to adjust brightness.
+    gamma < 1: brightens image
+    gamma > 1: darkens image
+    """
+    inv_gamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    return cv2.LUT(image, table)
+
+
 def _enhance_for_detection(gray: np.ndarray) -> np.ndarray:
     """
-    Apply light preprocessing to improve face detection on low-contrast or slightly blurry images.
-    Uses CLAHE (adaptive histogram equalization) and a mild bilateral filter.
+    Apply adaptive preprocessing to improve face detection, especially in low light conditions.
+    Uses brightness detection to apply appropriate enhancement:
+    - Dark images: More aggressive CLAHE + gamma correction
+    - Bright images: Standard CLAHE
     """
-    # CLAHE for contrast
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(gray)
-
-    # Mild bilateral filtering to reduce noise while preserving edges (helps detection on some images)
-    enhanced = cv2.bilateralFilter(enhanced, d=5, sigmaColor=75, sigmaSpace=75)
+    brightness = _calculate_brightness(gray)
+    
+    # Determine if image is dark (threshold: 80/255)
+    is_dark = brightness < 80
+    is_very_dark = brightness < 50
+    
+    # Apply gamma correction for very dark images
+    if is_very_dark:
+        # Brighten significantly (gamma 0.5 = 2x brighter)
+        enhanced = _gamma_correction(gray, 0.5)
+    elif is_dark:
+        # Moderate brightening (gamma 0.7)
+        enhanced = _gamma_correction(gray, 0.7)
+    else:
+        enhanced = gray.copy()
+    
+    # Apply CLAHE with adaptive parameters
+    if is_very_dark:
+        # More aggressive CLAHE for very dark images
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    elif is_dark:
+        # Moderate CLAHE for dark images
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    else:
+        # Standard CLAHE for normal/bright images
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    
+    enhanced = clahe.apply(enhanced)
+    
+    # Bilateral filtering to reduce noise while preserving edges
+    # More aggressive for dark images (more noise)
+    if is_dark:
+        enhanced = cv2.bilateralFilter(enhanced, d=9, sigmaColor=75, sigmaSpace=75)
+    else:
+        enhanced = cv2.bilateralFilter(enhanced, d=5, sigmaColor=75, sigmaSpace=75)
+    
     return enhanced
 
 
@@ -63,8 +114,12 @@ def preprocess_face(
 
         # Cascade (built-in). Using standard frontal face cascade.
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        
+        # Calculate brightness to adjust detection parameters
+        brightness = _calculate_brightness(small_enh)
+        is_dark = brightness < 80
 
-        # Primary detection pass
+        # Primary detection pass with standard parameters
         faces = face_cascade.detectMultiScale(
             small_enh,
             scaleFactor=1.1,
@@ -80,6 +135,27 @@ def preprocess_face(
                 scaleFactor=1.05,
                 minNeighbors=3,
                 minSize=(20, 20),
+                flags=cv2.CASCADE_SCALE_IMAGE,
+            )
+
+        # For dark images, try even more permissive detection
+        if len(faces) == 0 and is_dark:
+            # Very permissive for low light conditions
+            faces = face_cascade.detectMultiScale(
+                small_enh,
+                scaleFactor=1.03,  # Smaller scale factor = more scales checked
+                minNeighbors=2,    # Lower threshold
+                minSize=(15, 15),  # Smaller minimum size
+                flags=cv2.CASCADE_SCALE_IMAGE,
+            )
+        
+        # Try with original (non-enhanced) image if still nothing found
+        if len(faces) == 0:
+            faces = face_cascade.detectMultiScale(
+                small,
+                scaleFactor=1.1,
+                minNeighbors=4,
+                minSize=(25, 25),
                 flags=cv2.CASCADE_SCALE_IMAGE,
             )
 
