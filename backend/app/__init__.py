@@ -15,6 +15,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 # ----------------------------
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_DIR_DEFAULT = os.path.join(PROJECT_ROOT, "tmp")
+IMAGES_DIR_DEFAULT = os.path.join(PROJECT_ROOT, "images")
 LOG_CSV = os.path.join(PROJECT_ROOT, "predictions_log.csv")
 DB_PATH = os.path.join(PROJECT_ROOT, "predictions.db")
 
@@ -23,11 +24,14 @@ DEFAULTS = {
     "MIN_CONFIDENCE": 0.5,
     "MAX_FILE_SIZE": 5 * 1024 * 1024,  # 5 MB
     "TMP_DIR": TMP_DIR_DEFAULT,
+    "IMAGES_DIR": IMAGES_DIR_DEFAULT,
     "ALLOWED_EXT": (".jpg", ".jpeg", ".png"),
+    "CORS_ORIGINS": "*",  # Can be overridden for production
 }
 
-# Ensure tmp dir exists
+# Ensure directories exist
 os.makedirs(DEFAULTS["TMP_DIR"], exist_ok=True)
+os.makedirs(DEFAULTS["IMAGES_DIR"], exist_ok=True)
 
 # Ensure CSV header exists (helpful for older logs)
 if not os.path.exists(LOG_CSV):
@@ -55,7 +59,15 @@ def create_app(config: dict | None = None):
         cfg.update(config)
 
     app = Flask(__name__)
-    CORS(app, resources={r"/*": {"origins": "*"}})  # you can restrict origins: CORS(app, origins=[...])
+    
+    # CORS configuration - allow config override
+    cors_origins = cfg.get("CORS_ORIGINS", DEFAULTS["CORS_ORIGINS"])
+    if cors_origins == "*":
+        CORS(app, resources={r"/*": {"origins": "*"}})
+    else:
+        # Allow list of origins
+        origins_list = cors_origins.split(",") if isinstance(cors_origins, str) else cors_origins
+        CORS(app, resources={r"/*": {"origins": origins_list}})
 
     # ---------- file logging setup (after app created) ----------
     LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
@@ -88,6 +100,7 @@ def create_app(config: dict | None = None):
     # Apply config to app
     app.config["MAX_CONTENT_LENGTH"] = cfg["MAX_FILE_SIZE"]
     app.config["TMP_DIR"] = cfg["TMP_DIR"]
+    app.config["IMAGES_DIR"] = cfg.get("IMAGES_DIR", DEFAULTS["IMAGES_DIR"])
     app.config["ALLOWED_EXT"] = cfg["ALLOWED_EXT"]
     app.config["MIN_CONFIDENCE"] = cfg["MIN_CONFIDENCE"]
 
@@ -96,8 +109,11 @@ def create_app(config: dict | None = None):
 
     # Local (deferred) imports — avoid import-time side effects
     from .model_loader import load_emotion_model
-    from .db_logger import init_db, log_prediction, get_metrics, tail_rows
+    from .db_logger import init_db, log_prediction, get_metrics, tail_rows, get_total_count
     from .utils import preprocess_face
+    from .image_storage import save_image, get_image_path, ensure_images_dir
+    from .validators import validate_image_file, validate_pagination_params, validate_confidence_range
+    from .rate_limiter import detect_limiter, logs_limiter, images_limiter, get_client_identifier
 
     # Initialize DB
     try:
@@ -140,9 +156,13 @@ def create_app(config: dict | None = None):
     # ----------------------------
     # Error handlers
     # ----------------------------
+    from .error_handlers import register_error_handlers, APIError, ValidationError, NotFoundError, ServiceUnavailableError
+    
+    register_error_handlers(app)
+    
     @app.errorhandler(RequestEntityTooLarge)
     def handle_large_file(e):
-        return jsonify({"error": "File too large. Max 5MB."}), 413
+        return jsonify({"error": "File too large", "max_size_mb": app.config.get("MAX_CONTENT_LENGTH", 5 * 1024 * 1024) / (1024 * 1024)}), 413
 
     # ----------------------------
     # Routes
@@ -177,26 +197,118 @@ def create_app(config: dict | None = None):
 
     @app.route("/logs", methods=["GET"])
     def logs():
+        """
+        GET /logs?limit=20&offset=0&emotion=happy&min_confidence=0.5&max_confidence=1.0&date_from=2024-01-01&date_to=2024-12-31
+        
+        Returns paginated and filtered logs.
+        """
+        # Rate limiting
+        client_id = get_client_identifier(request)
+        is_allowed, remaining = logs_limiter.is_allowed(client_id)
+        if not is_allowed:
+            return jsonify({
+                "error": "Rate limit exceeded",
+                "detail": f"Maximum {logs_limiter.max_requests} requests per {logs_limiter.window_seconds} seconds",
+                "retry_after": logs_limiter.window_seconds,
+            }), 429
+        
         try:
-            limit = int(request.args.get("limit", 20))
-            limit = max(1, min(200, limit))  # clamp
-            rows = tail_rows(DB_PATH, limit=limit)  # tail_rows returns list of tuples
-            # convert to list of dicts (id, ts, filename, emotion, confidence)
+            # Validate pagination
+            limit, offset, pagination_error = validate_pagination_params(
+                request.args.get("limit"),
+                request.args.get("offset"),
+            )
+            if pagination_error:
+                return jsonify({"error": pagination_error}), 400
+            
+            # Validate confidence range
+            min_confidence, max_confidence, confidence_error = validate_confidence_range(
+                request.args.get("min_confidence"),
+                request.args.get("max_confidence"),
+            )
+            if confidence_error:
+                return jsonify({"error": confidence_error}), 400
+            
+            # Filters
+            emotion_filter = request.args.get("emotion", None)
+            if emotion_filter and emotion_filter.strip():
+                emotion_filter = emotion_filter.strip()
+            else:
+                emotion_filter = None
+            
+            date_from = request.args.get("date_from", None)
+            date_to = request.args.get("date_to", None)
+            
+            # Fetch data
+            rows = tail_rows(
+                DB_PATH,
+                limit=limit,
+                offset=offset,
+                emotion_filter=emotion_filter,
+                min_confidence=min_confidence,
+                max_confidence=max_confidence,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            
+            total = get_total_count(
+                DB_PATH,
+                emotion_filter=emotion_filter,
+                min_confidence=min_confidence,
+                max_confidence=max_confidence,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            
+            # Convert to list of dicts
             result = []
             for r in rows:
-                if len(r) == 4:
-                    ts, filename, emotion, confidence = r
-                    record = {"ts": ts, "filename": filename, "emotion": emotion, "confidence": confidence}
+                if len(r) == 6:
+                    _id, ts, filename, image_path, emotion, confidence = r
+                    record = {
+                        "id": _id,
+                        "ts": ts,
+                        "filename": filename,
+                        "image_path": image_path or filename,  # Fallback to filename if no image_path
+                        "emotion": emotion,
+                        "confidence": confidence,
+                    }
                 elif len(r) == 5:
                     _id, ts, filename, emotion, confidence = r
-                    record = {"id": _id, "ts": ts, "filename": filename, "emotion": emotion, "confidence": confidence}
+                    record = {
+                        "id": _id,
+                        "ts": ts,
+                        "filename": filename,
+                        "image_path": filename,  # Fallback
+                        "emotion": emotion,
+                        "confidence": confidence,
+                    }
+                elif len(r) == 4:
+                    ts, filename, emotion, confidence = r
+                    record = {
+                        "ts": ts,
+                        "filename": filename,
+                        "image_path": filename,  # Fallback
+                        "emotion": emotion,
+                        "confidence": confidence,
+                    }
                 else:
                     record = {"row": r}
                 result.append(record)
-            return jsonify({"ok": True, "logs": result}), 200
+            
+            return jsonify({
+                "ok": True,
+                "logs": result,
+                "pagination": {
+                    "total": total,
+                    "limit": limit,
+                    "offset": offset,
+                    "has_more": (offset + limit) < total,
+                },
+            }), 200
         except Exception as exc:
             app.logger.exception("Failed to fetch logs")
-            return jsonify({"error": "failed", "detail": str(exc)}), 500
+            return jsonify({"error": "Failed to fetch logs", "detail": str(exc)}), 500
 
     @app.route("/detect", methods=["POST"])
     def detect():
@@ -204,26 +316,39 @@ def create_app(config: dict | None = None):
         POST form-data: image file under key 'image'
         Returns: JSON {emotion, confidence} or error JSON
         """
+        # Rate limiting
+        client_id = get_client_identifier(request)
+        is_allowed, remaining = detect_limiter.is_allowed(client_id)
+        if not is_allowed:
+            return jsonify({
+                "error": "Rate limit exceeded",
+                "detail": f"Maximum {detect_limiter.max_requests} requests per {detect_limiter.window_seconds} seconds",
+                "retry_after": detect_limiter.window_seconds,
+            }), 429
+        
         # Use config-stored model/labels (these can be updated at runtime).
         model_local = app.config.get("MODEL")
         labels_local = app.config.get("LABELS") or []
 
         if model_local is None:
             app.logger.error("Detect called but model not loaded")
-            return jsonify({"error": "Model not loaded on Server"}), 503
+            raise ServiceUnavailableError("Model not loaded on server")
 
         # Validate upload presence
         if "image" not in request.files:
-            return jsonify({"error": "No image provided."}), 400
-
+            raise ValidationError("No image provided")
+        
         file = request.files["image"]
-        filename = secure_filename(file.filename or "upload.jpg")
-        if filename == "":
-            return jsonify({"error": "Invalid filename"}), 400
-
-        ext = os.path.splitext(filename)[1].lower()
-        if ext not in app.config.get("ALLOWED_EXT", (".jpg", ".jpeg", ".png")):
-            return jsonify({"error": f"Unsupported file type: {ext}"}), 415
+        
+        # Comprehensive validation
+        is_valid, error_msg, filename = validate_image_file(
+            file,
+            max_size=app.config.get("MAX_CONTENT_LENGTH", DEFAULTS["MAX_FILE_SIZE"]),
+            allowed_extensions=app.config.get("ALLOWED_EXT", DEFAULTS["ALLOWED_EXT"]),
+        )
+        
+        if not is_valid:
+            raise ValidationError(error_msg)
 
         tmp_dir = app.config.get("TMP_DIR", TMP_DIR_DEFAULT)
         tmp_path = os.path.join(tmp_dir, filename)
@@ -241,7 +366,7 @@ def create_app(config: dict | None = None):
 
             if face_array is None:
                 app.logger.info("No face detected for file %s", filename)
-                return jsonify({"error": "No face detected."}), 400
+                raise ValidationError("No face detected in image")
 
             # Defensive conversion and validations
             import numpy as np
@@ -314,22 +439,38 @@ def create_app(config: dict | None = None):
             else:
                 emotion = str(idx)
 
+            # Save image even for low confidence (for debugging/analysis)
+            images_dir = app.config.get("IMAGES_DIR", IMAGES_DIR_DEFAULT)
+            stored_filename = None
+            try:
+                stored_filename = save_image(tmp_path, images_dir, used_filename)
+            except Exception:
+                app.logger.exception("Failed to save image, continuing without storage")
+            
             # Confidence threshold
             min_conf = app.config.get("MIN_CONFIDENCE", DEFAULTS["MIN_CONFIDENCE"])
             if confidence < min_conf:
                 try:
-                    log_prediction(DB_PATH, used_filename, "low_confidence", confidence)
+                    log_prediction(DB_PATH, used_filename, "low_confidence", confidence, stored_filename)
                 except Exception:
                     app.logger.exception("Failed logging low-confidence prediction")
-                return jsonify({"error": "low confidence", "confidence": round(confidence, 3)}), 422
+                return jsonify({
+                    "error": "low confidence",
+                    "confidence": round(confidence, 3),
+                    "filename": stored_filename or used_filename,
+                }), 422
 
-            # Log and respond
+            # Log and respond (image already saved above)
             try:
-                log_prediction(DB_PATH, used_filename, emotion, confidence)
+                log_prediction(DB_PATH, used_filename, emotion, confidence, stored_filename)
             except Exception:
                 app.logger.exception("Failed to log prediction to DB")
 
-            return jsonify({"emotion": emotion, "confidence": round(confidence, 3)}), 200
+            return jsonify({
+                "emotion": emotion,
+                "confidence": round(confidence, 3),
+                "filename": stored_filename or used_filename,
+            }), 200
 
         except Exception as exc:
             app.logger.exception("detection error for file %s", filename)
@@ -337,11 +478,49 @@ def create_app(config: dict | None = None):
             return jsonify({"error": "internal error", "detail": str(exc), "trace": tb}), 500
 
         finally:
-            # cleanup tmp file
+            # cleanup tmp file (image is already saved to images/ if successful)
             try:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
             except Exception:
                 app.logger.exception("failed removing tmp file")
+
+    # ----------------------------
+    # Image serving endpoint
+    # ----------------------------
+    @app.route("/images/<filename>", methods=["GET"])
+    def serve_image(filename: str):
+        """
+        Serve stored images.
+        GET /images/{filename}
+        """
+        from flask import send_from_directory, abort
+        
+        # Rate limiting
+        client_id = get_client_identifier(request)
+        is_allowed, remaining = images_limiter.is_allowed(client_id)
+        if not is_allowed:
+            return jsonify({
+                "error": "Rate limit exceeded",
+                "detail": f"Maximum {images_limiter.max_requests} requests per {images_limiter.window_seconds} seconds",
+                "retry_after": images_limiter.window_seconds,
+            }), 429
+        
+        try:
+            images_dir = app.config.get("IMAGES_DIR", IMAGES_DIR_DEFAULT)
+            image_path = get_image_path(images_dir, filename)
+            
+            if not image_path:
+                app.logger.warning("Image not found: %s", filename)
+                abort(404)
+            
+            return send_from_directory(
+                images_dir,
+                filename,
+                mimetype="image/jpeg",  # Default, will be auto-detected
+            )
+        except Exception as exc:
+            app.logger.exception("Failed to serve image %s", filename)
+            return jsonify({"error": "Failed to serve image", "detail": str(exc)}), 500
 
     return app
