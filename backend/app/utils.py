@@ -105,6 +105,8 @@ def preprocess_face(
             logger.warning(f"Image file is empty: {image_path}")
             return None, None
         
+        # Use print for critical debugging (always shows in logs)
+        print(f"[FACE_DETECTION] Loading image: {image_path}, file size: {file_size} bytes")
         logger.info(f"Loading image: {image_path}, file size: {file_size} bytes")
         
         # Try loading with cv2.imread
@@ -127,6 +129,7 @@ def preprocess_face(
             return None, None
 
         h0, w0 = img.shape[:2]
+        print(f"[FACE_DETECTION] Successfully loaded image: {image_path}, size: {w0}x{h0}, shape: {img.shape}")
         logger.info(f"Successfully loaded image: {image_path}, size: {w0}x{h0}, shape: {img.shape}")
         # grayscale copy for detection
         gray_full = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -298,6 +301,7 @@ def preprocess_face(
         # Last resort: if no face detected, use fallback strategies
         # This handles cases where face detection fails but there's clearly a face
         if len(faces) == 0:
+            print(f"[FACE_DETECTION] No face detected with all methods, trying fallback strategies for {image_path} (image size: {w0}x{h0})")
             logger.info(f"No face detected with all methods, trying fallback strategies for {image_path} (image size: {w0}x{h0})")
             
             # Strategy 1: Center crop - assume face is in center 60% of image
@@ -334,9 +338,10 @@ def preprocess_face(
                                     face_arr = face_arr.astype(np.float32)
                                 
                                 if np.isfinite(face_arr).all():
-                                    logger.info(f"Successfully using center crop fallback for {image_path}, final shape: {face_arr.shape}")
-                                    used_filename = os.path.basename(image_path) or "upload.jpg"
-                                    return face_arr, used_filename
+                    print(f"[FACE_DETECTION] Successfully using center crop fallback for {image_path}, final shape: {face_arr.shape}")
+                    logger.info(f"Successfully using center crop fallback for {image_path}, final shape: {face_arr.shape}")
+                    used_filename = os.path.basename(image_path) or "upload.jpg"
+                    return face_arr, used_filename
                 except Exception as e:
                     logger.warning(f"Center crop fallback failed: {e}")
             
@@ -360,13 +365,15 @@ def preprocess_face(
                             face_arr = face_arr.astype(np.float32)
                         
                         if np.isfinite(face_arr).all():
-                            logger.info(f"Successfully using entire image fallback for {image_path}, final shape: {face_arr.shape}")
-                            used_filename = os.path.basename(image_path) or "upload.jpg"
-                            return face_arr, used_filename
+                    print(f"[FACE_DETECTION] Successfully using entire image fallback for {image_path}, final shape: {face_arr.shape}")
+                    logger.info(f"Successfully using entire image fallback for {image_path}, final shape: {face_arr.shape}")
+                    used_filename = os.path.basename(image_path) or "upload.jpg"
+                    return face_arr, used_filename
             except Exception as e:
                 logger.exception(f"Entire image fallback also failed for {image_path}: {e}")
             
             # If all fallbacks fail, return None
+            print(f"[FACE_DETECTION] ERROR: ALL face detection methods and fallbacks failed for {image_path} (size: {w0}x{h0})")
             logger.error(f"ALL face detection methods and fallbacks failed for {image_path} (size: {w0}x{h0})")
             return None, None
 
