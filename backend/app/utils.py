@@ -112,54 +112,188 @@ def preprocess_face(
         # Try to enhance small image for better detection on blurry photos
         small_enh = _enhance_for_detection(small)
 
-        # Cascade (built-in). Using standard frontal face cascade.
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        # Try multiple cascade classifiers for better detection
+        cascade_paths = [
+            "haarcascade_frontalface_default.xml",
+            "haarcascade_frontalface_alt.xml",
+            "haarcascade_frontalface_alt2.xml",
+        ]
         
         # Calculate brightness to adjust detection parameters
         brightness = _calculate_brightness(small_enh)
         is_dark = brightness < 80
-
-        # Primary detection pass with standard parameters
-        faces = face_cascade.detectMultiScale(
-            small_enh,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(30, 30),
-            flags=cv2.CASCADE_SCALE_IMAGE,
-        )
-
-        # If nothing found, try a more permissive pass (helps blurry / odd-angle photos)
-        if len(faces) == 0:
-            faces = face_cascade.detectMultiScale(
-                small_enh,
-                scaleFactor=1.05,
-                minNeighbors=3,
-                minSize=(20, 20),
-                flags=cv2.CASCADE_SCALE_IMAGE,
-            )
-
-        # For dark images, try even more permissive detection
-        if len(faces) == 0 and is_dark:
-            # Very permissive for low light conditions
-            faces = face_cascade.detectMultiScale(
-                small_enh,
-                scaleFactor=1.03,  # Smaller scale factor = more scales checked
-                minNeighbors=2,    # Lower threshold
-                minSize=(15, 15),  # Smaller minimum size
-                flags=cv2.CASCADE_SCALE_IMAGE,
-            )
+        is_very_dark = brightness < 50
+        
+        faces = []
+        
+        # Try each cascade classifier with progressively more permissive parameters
+        for cascade_name in cascade_paths:
+            if len(faces) > 0:
+                break
+                
+            try:
+                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + cascade_name)
+                if face_cascade.empty():
+                    continue
+                
+                # Try multiple detection strategies with increasingly permissive parameters
+                detection_attempts = [
+                    # Standard detection
+                    {"scaleFactor": 1.1, "minNeighbors": 5, "minSize": (30, 30)},
+                    # More permissive
+                    {"scaleFactor": 1.05, "minNeighbors": 3, "minSize": (20, 20)},
+                    # Even more permissive
+                    {"scaleFactor": 1.03, "minNeighbors": 2, "minSize": (15, 15)},
+                    # Very permissive
+                    {"scaleFactor": 1.02, "minNeighbors": 1, "minSize": (10, 10)},
+                    # Extremely permissive
+                    {"scaleFactor": 1.01, "minNeighbors": 1, "minSize": (5, 5)},
+                    # Last resort - no minSize constraint
+                    {"scaleFactor": 1.1, "minNeighbors": 1, "minSize": None},
+                ]
+                
+                for attempt in detection_attempts:
+                    if len(faces) > 0:
+                        break
+                    try:
+                        params = {
+                            "scaleFactor": attempt["scaleFactor"],
+                            "minNeighbors": attempt["minNeighbors"],
+                            "flags": cv2.CASCADE_SCALE_IMAGE,
+                        }
+                        if attempt["minSize"] is not None:
+                            params["minSize"] = attempt["minSize"]
+                        
+                        faces = face_cascade.detectMultiScale(small_enh, **params)
+                    except Exception:
+                        continue
+                    
+            except Exception:
+                continue
         
         # Try with original (non-enhanced) image if still nothing found
         if len(faces) == 0:
-            faces = face_cascade.detectMultiScale(
-                small,
-                scaleFactor=1.1,
-                minNeighbors=4,
-                minSize=(25, 25),
-                flags=cv2.CASCADE_SCALE_IMAGE,
-            )
-
+            try:
+                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+                if not face_cascade.empty():
+                    # Try multiple permissive attempts on original
+                    for scale_factor, min_neighbors, min_size in [
+                        (1.1, 4, (25, 25)),
+                        (1.05, 2, (15, 15)),
+                        (1.03, 1, (10, 10)),
+                        (1.02, 1, (5, 5)),
+                        (1.1, 1, None),  # No minSize
+                    ]:
+                        if len(faces) > 0:
+                            break
+                        try:
+                            params = {
+                                "scaleFactor": scale_factor,
+                                "minNeighbors": min_neighbors,
+                                "flags": cv2.CASCADE_SCALE_IMAGE,
+                            }
+                            if min_size is not None:
+                                params["minSize"] = min_size
+                            faces = face_cascade.detectMultiScale(small, **params)
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+        
+        # Last resort: try on full-size image if downscaled
+        used_full_size = False
         if len(faces) == 0:
+            try:
+                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+                if not face_cascade.empty():
+                    # Try on full-size enhanced image
+                    gray_enh_full = _enhance_for_detection(gray_full)
+                    
+                    # Calculate appropriate minSize for full image
+                    base_min_size = 30 if scale >= 1.0 else max(30, int(30 / scale))
+                    
+                    # Try multiple attempts on full-size enhanced
+                    for scale_factor, min_neighbors, min_size_mult in [
+                        (1.1, 4, 1.0),
+                        (1.05, 2, 0.7),
+                        (1.03, 1, 0.5),
+                        (1.02, 1, 0.3),
+                        (1.1, 1, None),  # No minSize
+                    ]:
+                        if len(faces) > 0:
+                            break
+                        try:
+                            params = {
+                                "scaleFactor": scale_factor,
+                                "minNeighbors": min_neighbors,
+                                "flags": cv2.CASCADE_SCALE_IMAGE,
+                            }
+                            if min_size_mult is not None:
+                                min_size_val = int(base_min_size * min_size_mult)
+                                params["minSize"] = (min_size_val, min_size_val)
+                            faces = face_cascade.detectMultiScale(gray_enh_full, **params)
+                            if len(faces) > 0:
+                                used_full_size = True
+                        except Exception:
+                            continue
+                    
+                    # If still nothing, try on original full-size grayscale
+                    if len(faces) == 0:
+                        for scale_factor, min_neighbors, min_size_mult in [
+                            (1.1, 3, 1.0),
+                            (1.05, 1, 0.7),
+                            (1.03, 1, 0.5),
+                            (1.1, 1, None),
+                        ]:
+                            if len(faces) > 0:
+                                break
+                            try:
+                                params = {
+                                    "scaleFactor": scale_factor,
+                                    "minNeighbors": min_neighbors,
+                                    "flags": cv2.CASCADE_SCALE_IMAGE,
+                                }
+                                if min_size_mult is not None:
+                                    min_size_val = int(base_min_size * min_size_mult)
+                                    params["minSize"] = (min_size_val, min_size_val)
+                                faces = face_cascade.detectMultiScale(gray_full, **params)
+                                if len(faces) > 0:
+                                    used_full_size = True
+                            except Exception:
+                                continue
+            except Exception:
+                pass
+
+        # Last resort: if no face detected, try using center crop of image
+        # This handles cases where face detection fails but there's clearly a face
+        if len(faces) == 0:
+            # Try center crop - assume face is in center 60% of image
+            center_x, center_y = w0 // 2, h0 // 2
+            crop_w = int(w0 * 0.6)
+            crop_h = int(h0 * 0.6)
+            x1 = max(0, center_x - crop_w // 2)
+            y1 = max(0, center_y - crop_h // 2)
+            x2 = min(w0, x1 + crop_w)
+            y2 = min(h0, y1 + crop_h)
+            
+            # Only use center crop if image is reasonably sized (not too small)
+            if crop_w >= 48 and crop_h >= 48:
+                face_crop = gray_full[y1:y2, x1:x2]
+                face_resized = cv2.resize(face_crop, (target_size[1], target_size[0]), interpolation=cv2.INTER_AREA)
+                face_arr = np.asarray(face_resized, dtype=np.float32)
+                face_arr = face_arr / 255.0
+                
+                if face_arr.ndim == 2:
+                    face_arr = np.expand_dims(face_arr, axis=-1)
+                face_arr = np.expand_dims(face_arr, axis=0)
+                
+                if face_arr.dtype != np.float32:
+                    face_arr = face_arr.astype(np.float32)
+                if np.isfinite(face_arr).all():
+                    used_filename = os.path.basename(image_path) or "upload.jpg"
+                    return face_arr, used_filename
+            
+            # If center crop also fails, return None
             return None, None
 
         # Choose the largest detected face (usually the main subject)
@@ -167,10 +301,14 @@ def preprocess_face(
         (x_s, y_s, w_s, h_s) = faces[0]
 
         # Map coordinates back to original image scale
-        x = int(x_s / scale)
-        y = int(y_s / scale)
-        w = int(w_s / scale)
-        h = int(h_s / scale)
+        # If we used full-size image, no scaling needed
+        if used_full_size:
+            x, y, w, h = int(x_s), int(y_s), int(w_s), int(h_s)
+        else:
+            x = int(x_s / scale)
+            y = int(y_s / scale)
+            w = int(w_s / scale)
+            h = int(h_s / scale)
 
         # Pad bounding box slightly (pad_ratio of face size)
         pad_w = int(w * pad_ratio)
