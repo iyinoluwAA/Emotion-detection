@@ -30,7 +30,11 @@ fi
 # ensure readable
 chmod a+r "$MODEL_PATH" || true
 
-# Start gunicorn bound to Render-provided $PORT (fallback to 5000 locally)
+# Start gunicorn bound to provided $PORT (fallback to 5000 locally)
+# Use 1 worker with 1 thread to minimize memory usage (ViT model is ~300MB+ per worker)
+# Railway free tier has limited memory, so we must be conservative
 PORT="${PORT:-5000}"
 echo "Starting gunicorn on 0.0.0.0:${PORT}"
-exec gunicorn main:app --bind 0.0.0.0:"${PORT}" --workers 2 --threads 2 --timeout 60
+# Suppress protobuf warnings (they're just version mismatch warnings, not errors)
+export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+exec gunicorn main:app --bind 0.0.0.0:"${PORT}" --workers 1 --threads 1 --timeout 120 --worker-class gthread

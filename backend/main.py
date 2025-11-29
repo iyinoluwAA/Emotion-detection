@@ -1,6 +1,11 @@
 # main.py
 import os
 import logging
+import warnings
+
+# Suppress protobuf version warnings (they're harmless but noisy)
+warnings.filterwarnings("ignore", category=UserWarning, module="google.protobuf")
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 # Make PROJECT_ROOT explicit so module-level code in the container works reliably
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))

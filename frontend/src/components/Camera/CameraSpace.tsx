@@ -144,10 +144,19 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
 
   async function submitAndTrack(file: Blob, filename = "upload.jpg") {
     try {
-      setProgress(20);
+      setProgress(10);
+      // Simulate progress during upload (Railway can be slow)
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev < 80) return prev + 5; // Gradually increase to 80%
+          return prev;
+        });
+      }, 500); // Update every 500ms
+      
       await submitFile(file, filename);
-      setProgress(60);
-      await new Promise((r) => setTimeout(r, 300));
+      clearInterval(progressInterval);
+      setProgress(90);
+      await new Promise((r) => setTimeout(r, 200));
       setProgress(100);
       setStatus("success");
       onRefreshLogs && (await onRefreshLogs());
