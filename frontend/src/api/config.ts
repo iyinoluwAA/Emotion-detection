@@ -5,11 +5,17 @@
 
 // Determine API URL based on environment
 // In development (localhost), use local backend
-// In production, use Render backend
+// In production, use Railway backend
 const getBaseUrl = (): string => {
-  // If VITE_API_URL is explicitly set, use it
+  // If VITE_API_URL is explicitly set, use it (but ensure it has https://)
   if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+    const url = import.meta.env.VITE_API_URL.trim();
+    // Ensure URL has protocol
+    if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+      console.warn('[API] VITE_API_URL missing protocol, adding https://');
+      return `https://${url}`;
+    }
+    return url;
   }
   
   // In development (localhost), use local backend
@@ -17,7 +23,7 @@ const getBaseUrl = (): string => {
     return "http://localhost:5000";
   }
   
-     // Production default: Railway backend
+  // Production default: Railway backend
   return "https://emotion-backend-production-3d90.up.railway.app";
 };
 
