@@ -44,11 +44,10 @@ def preprocess_face_for_vit(
         from app.utils import _enhance_for_detection
         small_enh = _enhance_for_detection(small)
 
-        # Try multiple cascade classifiers
+        # Try cascade classifiers - optimized for speed (fewer attempts)
         cascade_paths = [
             "haarcascade_frontalface_default.xml",
             "haarcascade_frontalface_alt.xml",
-            "haarcascade_frontalface_alt2.xml",
         ]
         
         faces = []
@@ -61,11 +60,10 @@ def preprocess_face_for_vit(
                 if face_cascade.empty():
                     continue
                 
-                # Multiple attempts with different parameters
+                # Reduced attempts for speed - start with most common successful params
                 for scale_factor, min_neighbors, min_size in [
-                    (1.1, 5, (30, 30)),
-                    (1.05, 3, (20, 20)),
-                    (1.03, 2, (15, 15)),
+                    (1.05, 3, (20, 20)),  # Most common successful params first
+                    (1.1, 5, (30, 30)),   # Fallback
                 ]:
                     faces = face_cascade.detectMultiScale(
                         small_enh,
@@ -104,8 +102,9 @@ def preprocess_face_for_vit(
         face_crop = img_rgb[y1:y2, x1:x2]
 
         # Convert to PIL Image and resize to 224x224 (ViT input size)
+        # Use LANCZOS for better quality/speed balance (faster than BICUBIC, better than NEAREST)
         face_pil = Image.fromarray(face_crop)
-        face_pil = face_pil.resize((224, 224), Image.Resampling.BICUBIC)
+        face_pil = face_pil.resize((224, 224), Image.Resampling.LANCZOS)
 
         import os
         used_filename = os.path.basename(image_path) or "upload.jpg"
@@ -139,18 +138,19 @@ def predict_with_vit(
     # Preprocess image for ViT
     inputs = processor(image, return_tensors="pt")
     
-    # Run prediction (set model to eval mode, but don't use context manager)
+    # Run prediction - optimized for speed
     import torch
     import torch.nn.functional as F
     
     model.eval()
-    with torch.no_grad():  # Disable gradient computation for inference
+    # Use inference_mode() instead of no_grad() - faster for inference-only
+    with torch.inference_mode():  # Faster than no_grad() for pure inference
         outputs = model(**inputs)
         logits = outputs.logits
     
-    # Get probabilities (softmax)
+    # Get probabilities (softmax) - optimized conversion
     probs = F.softmax(logits, dim=-1)
-    probs_np = probs.detach().cpu().numpy()[0]  # Get first (and only) batch item
+    probs_np = probs[0].cpu().numpy()  # Direct indexing, no detach needed in inference_mode
     
     # Get predicted class
     predicted_idx = int(torch.argmax(logits, dim=-1).item())
