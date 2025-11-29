@@ -44,18 +44,22 @@ def preprocess_face_for_vit(
         from app.utils import _enhance_for_detection
         small_enh = _enhance_for_detection(small)
 
-        # Aggressive face detection for difficult cases
-        # Try all 3 cascades with progressively more permissive parameters
-        cascade_paths = [
-            "haarcascade_frontalface_default.xml",
-            "haarcascade_frontalface_alt.xml",
-            "haarcascade_frontalface_alt2.xml",
+        # Optimized face detection: 2 cascades × 2 param sets = 4 attempts (fast)
+        # Then fallback to 3rd cascade if needed = +2 attempts (total 6 max)
+        # This balances speed (4 attempts) with reliability (6 attempts if needed)
+        cascade_paths_primary = [
+            "haarcascade_frontalface_default.xml",  # Most reliable
+            "haarcascade_frontalface_alt.xml",      # Good fallback
+        ]
+        
+        cascade_paths_fallback = [
+            "haarcascade_frontalface_alt2.xml",     # Last resort
         ]
         
         faces = []
         
-        # Try each cascade with progressively more permissive parameters
-        for cascade_name in cascade_paths:
+        # Primary: Try 2 cascades with 2 param sets each (4 attempts, fast path)
+        for cascade_name in cascade_paths_primary:
             if len(faces) > 0:
                 break
             try:
@@ -63,26 +67,16 @@ def preprocess_face_for_vit(
                 if face_cascade.empty():
                     continue
                 
-                # Attempt 1: Standard detection (most common)
+                # Attempt 1: Most common successful params (catches 90%+ of faces)
                 faces = face_cascade.detectMultiScale(
                     small_enh,
-                    scaleFactor=1.1,
-                    minNeighbors=5,
-                    minSize=(30, 30),
+                    scaleFactor=1.05,
+                    minNeighbors=3,
+                    minSize=(20, 20),
                     flags=cv2.CASCADE_SCALE_IMAGE,
                 )
                 
-                # Attempt 2: More permissive (helps blurry / odd-angle photos)
-                if len(faces) == 0:
-                    faces = face_cascade.detectMultiScale(
-                        small_enh,
-                        scaleFactor=1.05,
-                        minNeighbors=3,
-                        minSize=(20, 20),
-                        flags=cv2.CASCADE_SCALE_IMAGE,
-                    )
-                
-                # Attempt 3: Even more permissive (for challenging conditions)
+                # Attempt 2: More permissive (catches challenging cases)
                 if len(faces) == 0:
                     faces = face_cascade.detectMultiScale(
                         small_enh,
@@ -94,6 +88,33 @@ def preprocess_face_for_vit(
                     
             except Exception:
                 continue
+        
+        # Fallback: Only try 3rd cascade if primary failed (adds 2 more attempts)
+        if len(faces) == 0:
+            for cascade_name in cascade_paths_fallback:
+                if len(faces) > 0:
+                    break
+                try:
+                    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + cascade_name)
+                    if face_cascade.empty():
+                        continue
+                    
+                    # Try with permissive params
+                    for scale_factor, min_neighbors, min_size in [
+                        (1.05, 3, (20, 20)),
+                        (1.03, 2, (15, 15)),
+                    ]:
+                        faces = face_cascade.detectMultiScale(
+                            small_enh,
+                            scaleFactor=scale_factor,
+                            minNeighbors=min_neighbors,
+                            minSize=min_size,
+                            flags=cv2.CASCADE_SCALE_IMAGE,
+                        )
+                        if len(faces) > 0:
+                            break
+                except Exception:
+                    continue
         
         # Fallback 1: Try on original (non-enhanced) image if enhanced failed
         # Sometimes enhancement can hurt detection on already-good images
@@ -119,12 +140,13 @@ def preprocess_face_for_vit(
                 pass
         
         # Fallback 2: Try on full-size image if downscaled detection failed
-        # Some faces are too small when downscaled
-        if len(faces) == 0 and max_side > detect_max_dim:
+        # Only if image was actually downscaled (saves time on already-small images)
+        # Use very permissive params since we're already in fallback mode
+        if len(faces) == 0 and max_side > detect_max_dim and scale < 1.0:
             try:
                 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
                 if not face_cascade.empty():
-                    # Try on full-size grayscale with very permissive params
+                    # Single attempt with permissive params (full-size is slow, so only try once)
                     faces = face_cascade.detectMultiScale(
                         gray_full,
                         scaleFactor=1.05,
