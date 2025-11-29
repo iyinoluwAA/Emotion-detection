@@ -271,22 +271,48 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
             </Box>
           )}
           
-          {/* Show loading overlay during prediction */}
+          {/* Show loading overlay during prediction with progress */}
           {previewImageUrl && status === "loading" && (
             <Box
               style={{
                 position: "absolute",
                 inset: 0,
                 display: "flex",
+                flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                background: "rgba(0, 0, 0, 0.5)",
+                background: "rgba(0, 0, 0, 0.8)",
                 backdropFilter: "blur(2px)",
+                gap: "1rem",
+                zIndex: 10,
               }}
             >
               <Text size="lg" fw={600} c="white">
                 Analyzing emotion...
               </Text>
+              <Box style={{ width: "80%", maxWidth: "300px" }}>
+                <Box
+                  style={{
+                    width: "100%",
+                    height: "8px",
+                    backgroundColor: "rgba(255, 255, 255, 0.2)",
+                    borderRadius: "4px",
+                    overflow: "hidden",
+                  }}
+                >
+                  <Box
+                    style={{
+                      width: `${progress}%`,
+                      height: "100%",
+                      backgroundColor: "#4dabf7",
+                      transition: "width 0.3s ease",
+                    }}
+                  />
+                </Box>
+                <Text c="white" size="sm" ta="center" mt="xs">
+                  {progress < 30 ? "Uploading image..." : progress < 80 ? "Processing..." : "Almost done..."}
+                </Text>
+              </Box>
             </Box>
           )}
         </Box>
