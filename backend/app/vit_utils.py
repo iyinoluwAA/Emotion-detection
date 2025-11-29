@@ -117,32 +117,28 @@ def preprocess_face_for_vit(
                     continue
         
         # Fallback 1: Try on original (non-enhanced) image if enhanced failed
-        # Sometimes enhancement can hurt detection on already-good images
+        # Only try once with best params (don't waste time on multiple attempts)
         if len(faces) == 0:
             try:
                 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
                 if not face_cascade.empty():
-                    # Try with permissive params on original image
-                    for scale_factor, min_neighbors, min_size in [
-                        (1.05, 3, (20, 20)),
-                        (1.03, 2, (15, 15)),
-                    ]:
-                        faces = face_cascade.detectMultiScale(
-                            small,  # Use original, not enhanced
-                            scaleFactor=scale_factor,
-                            minNeighbors=min_neighbors,
-                            minSize=min_size,
-                            flags=cv2.CASCADE_SCALE_IMAGE,
-                        )
-                        if len(faces) > 0:
-                            break
+                    # Single attempt with most successful params (faster than trying multiple)
+                    faces = face_cascade.detectMultiScale(
+                        small,  # Use original, not enhanced
+                        scaleFactor=1.05,
+                        minNeighbors=3,
+                        minSize=(20, 20),
+                        flags=cv2.CASCADE_SCALE_IMAGE,
+                    )
             except Exception:
                 pass
         
-        # Fallback 2: Try on full-size image if downscaled detection failed
-        # Only if image was actually downscaled (saves time on already-small images)
-        # Use very permissive params since we're already in fallback mode
-        if len(faces) == 0 and max_side > detect_max_dim and scale < 1.0:
+        # Fallback 2: Try on full-size image ONLY if:
+        # 1. Still no face found
+        # 2. Image was actually downscaled (max_side > 800)
+        # 3. Scale is significantly reduced (scale < 0.5, meaning image is 2x+ larger)
+        # This prevents slow full-size detection on images that are only slightly over 800px
+        if len(faces) == 0 and max_side > detect_max_dim and scale < 0.5:
             try:
                 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
                 if not face_cascade.empty():

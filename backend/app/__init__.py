@@ -21,7 +21,7 @@ DB_PATH = os.path.join(PROJECT_ROOT, "predictions.db")
 
 # App-level defaults (can be overridden via app.config)
 DEFAULTS = {
-    "MIN_CONFIDENCE": 0.20,  # Lowered to 0.20 to allow more predictions through (was 0.25, originally 0.5)
+    "MIN_CONFIDENCE": 0.18,  # Lowered to 0.18 for ambiguous cases (was 0.20, originally 0.5)
     "MAX_FILE_SIZE": 5 * 1024 * 1024,  # 5 MB
     "TMP_DIR": TMP_DIR_DEFAULT,
     "IMAGES_DIR": IMAGES_DIR_DEFAULT,
