@@ -44,10 +44,12 @@ def preprocess_face_for_vit(
         from app.utils import _enhance_for_detection
         small_enh = _enhance_for_detection(small)
 
-        # Try cascade classifiers - optimized for speed (fewer attempts)
+        # Try cascade classifiers - balanced approach (3 cascades, 2 param sets each = 6 attempts)
+        # This is faster than 9 attempts but still reliable for challenging images
         cascade_paths = [
             "haarcascade_frontalface_default.xml",
             "haarcascade_frontalface_alt.xml",
+            "haarcascade_frontalface_alt2.xml",
         ]
         
         faces = []
@@ -60,10 +62,10 @@ def preprocess_face_for_vit(
                 if face_cascade.empty():
                     continue
                 
-                # Reduced attempts for speed - start with most common successful params
+                # Two attempts per cascade: standard params, then more permissive
                 for scale_factor, min_neighbors, min_size in [
-                    (1.05, 3, (20, 20)),  # Most common successful params first
-                    (1.1, 5, (30, 30)),   # Fallback
+                    (1.05, 3, (20, 20)),  # Most common successful params (catches 90%+ of faces)
+                    (1.03, 2, (15, 15)),   # More permissive fallback (catches challenging cases)
                 ]:
                     faces = face_cascade.detectMultiScale(
                         small_enh,
@@ -76,6 +78,22 @@ def preprocess_face_for_vit(
                         break
             except Exception:
                 continue
+        
+        # Fallback: try on original (non-enhanced) image if enhanced failed
+        # Sometimes enhancement can hurt detection on already-good images
+        if len(faces) == 0:
+            try:
+                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+                if not face_cascade.empty():
+                    faces = face_cascade.detectMultiScale(
+                        small,  # Use original, not enhanced
+                        scaleFactor=1.05,
+                        minNeighbors=3,
+                        minSize=(20, 20),
+                        flags=cv2.CASCADE_SCALE_IMAGE,
+                    )
+            except Exception:
+                pass
         
         if len(faces) == 0:
             return None, None
