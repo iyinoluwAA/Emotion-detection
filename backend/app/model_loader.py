@@ -42,8 +42,7 @@ def load_emotion_model():
             model_id, 
             cache_dir=str(models_dir),
             local_files_only=False,  # Allow download if not cached
-            low_cpu_mem_usage=True,  # Reduce memory usage during loading
-            torch_dtype="float32"    # Use float32 instead of float16 to avoid conversion overhead
+            low_cpu_mem_usage=True  # Reduce memory usage during loading
         )
         
         # Get labels from model config

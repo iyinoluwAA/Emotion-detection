@@ -17,8 +17,8 @@ const getBaseUrl = (): string => {
     return "http://localhost:5000";
   }
   
-  // Production default: Render backend
-  return "https://emotion-detection-1-8avi.onrender.com";
+     // Production default: Railway backend
+  return "https://emotion-backend-production-3d90.up.railway.app";
 };
 
 export const API_CONFIG = {
