@@ -71,15 +71,18 @@ def load_emotion_model():
             'processor': processor,
             'type': 'vit'
         }, labels, "hardlyhumans-vit-92.2%", 'vit'
-    except ImportError:
-        print("[MODEL] transformers library not installed. Install with: pip install transformers")
+    except ImportError as e:
+        print(f"[MODEL] ❌ transformers library not installed: {e}")
+        print("[MODEL] Install with: pip install transformers torch")
         print("[MODEL] Falling back to Keras model...")
     except Exception as e:
-        print(f"[MODEL] Failed to load ViT model: {e}")
-        print(f"[MODEL] Error details: {type(e).__name__}: {str(e)}")
+        print(f"[MODEL] ❌ Failed to load ViT model: {e}")
+        print(f"[MODEL] Error type: {type(e).__name__}")
+        print(f"[MODEL] Error message: {str(e)}")
         import traceback
-        print(f"[MODEL] Traceback: {traceback.format_exc()}")
-        print("[MODEL] Falling back to Keras model...")
+        print(f"[MODEL] Full traceback:")
+        print(traceback.format_exc())
+        print("[MODEL] ⚠️  Falling back to Keras model (lower accuracy)...")
 
     # Fall back to Keras models
     try:
