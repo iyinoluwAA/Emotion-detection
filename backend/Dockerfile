@@ -37,8 +37,9 @@ RUN pip install --no-cache-dir --upgrade --ignore-installed \
 
 # Install torch and transformers separately to manage memory better
 # Use CPU-only torch to reduce size (no CUDA dependencies)
+# Note: transformers requires PyTorch >= 2.1, so we need 2.1.0 or higher
 RUN pip install --no-cache-dir --upgrade --ignore-installed \
-    torch==2.0.0 --index-url https://download.pytorch.org/whl/cpu
+    torch>=2.1.0 --index-url https://download.pytorch.org/whl/cpu
 
 RUN pip install --no-cache-dir --upgrade --ignore-installed \
     transformers>=4.30.0
