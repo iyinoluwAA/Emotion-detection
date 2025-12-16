@@ -1,0 +1,17 @@
+# render.yaml (root)
+services:
+  - type: web
+    name: emotion-backend
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    branch: main
+    region: oregon
+    plan: free
+    autoDeploy: true
+    buildCommand: ""      # leave blank for Docker builds on Render
+    startCommand: ""      # leave blank; CMD in Dockerfile used
+    envVars:
+      - key: ASRIPA_MODEL_ID
+        value: HimAJ/asripa-emotion-detection
+      - key: PORT
+        value: 5000

@@ -1,0 +1,73 @@
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+app/__pycache__
+*.py[cod]
+
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and runtime
+logs/
+*.log
+predictions_log.csv
+finetune_output.log
+finetune_output_old.log
+finetune_training.log
+torch_install.log
+pip_install.log
+
+# Data & models (do not commit large dataset/model by default)
+data/
+models/*.h5
+models/*.keras
+# Fine-tuned model files (too large for git - will be downloaded at runtime or deployed separately)
+models/fine_tuned_vit/
+models/hardlyhumans/
+models/models--*/
+models/*.safetensors
+models/*.bin
+models/*.pt
+models/*.pth
+models/checkpoint-*
+**/checkpoint-*/
+
+# Secrets
+.kaggle/
+kaggle.json
+.env
+.env.* 
+
+# Others
+*.zip
+*.tar.gz
+# ignore SQLite DB and tmp uploads
+predictions.db
+predictions_log.csv
+tmp/
+.pytest_cache/
+
+# logs and databases
+backend/logs/
+backend/predictions.db
+# Exclude entire models directory (models downloaded at runtime from HuggingFace)
+backend/models/
+models/
+*.keras
+*.h5
+
+test.py

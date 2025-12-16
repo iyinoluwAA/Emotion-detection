@@ -1,0 +1,2 @@
+❌ Missing dependency: No module named 'transformers'
+Install with: pip install torch transformers scikit-learn pandas pillow

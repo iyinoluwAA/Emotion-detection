@@ -1,0 +1,18 @@
+Flask==3.1.1
+flask-cors==4.0.0
+
+# ML helpers (no TF/numpy here)
+# Note: numpy<2 required for opencv-python-headless compatibility
+numpy>=1.26.0,<2.0.0
+h5py>=3.7.0
+Pillow>=9.0.0
+opencv-python-headless==4.9.0.80
+
+# Vision Transformer support (for HardlyHumans model - 92.2% accuracy)
+transformers>=4.30.0
+torch>=2.0.0
+huggingface_hub>=0.20.0  # For downloading Asripa model
+
+# utilities & production
+requests>=2.28.0
+gunicorn>=23.0.0
