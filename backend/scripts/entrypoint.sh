@@ -43,24 +43,39 @@ if [ -n "$ASRIPA_MODEL_ID" ] && [ ! -f "$ASRIPA_MODEL_DIR/model.safetensors" ]; 
   mkdir -p "$ASRIPA_MODEL_DIR"
   
   # Use Python to download (huggingface_hub is in requirements)
+  # Note: On Render free tier (512MB), downloading 328MB model may cause OOM
+  # The app will gracefully fall back to base model if Asripa download fails
   python3 -c "
 from huggingface_hub import snapshot_download
 import os
+import sys
 try:
+    # Set lower memory usage for download
+    import gc
+    gc.collect()
     snapshot_download(
         repo_id='$ASRIPA_MODEL_ID',
         local_dir='$ASRIPA_MODEL_DIR',
         local_dir_use_symlinks=False
     )
     print('✅ Asripa model downloaded successfully!')
+except MemoryError:
+    print('⚠️  Out of memory downloading Asripa model (Render free tier limit)')
+    print('   App will use base model only - this is normal on free tier')
+    import shutil
+    if os.path.exists('$ASRIPA_MODEL_DIR'):
+        shutil.rmtree('$ASRIPA_MODEL_DIR')
+    sys.exit(0)  # Exit gracefully, not an error
 except Exception as e:
     print(f'⚠️  Failed to download Asripa model: {e}')
     print('   App will use base model only')
     import shutil
     if os.path.exists('$ASRIPA_MODEL_DIR'):
         shutil.rmtree('$ASRIPA_MODEL_DIR')
+    sys.exit(0)  # Exit gracefully, not an error
 " || {
-    echo "⚠️  Failed to download Asripa model, will use base model only"
+    echo "⚠️  Asripa model download skipped (memory limit or network issue)"
+    echo "   App will use base model only - this is normal on Render free tier"
     rm -rf "$ASRIPA_MODEL_DIR" 2>/dev/null || true
   }
 elif [ -f "$ASRIPA_MODEL_DIR/model.safetensors" ]; then

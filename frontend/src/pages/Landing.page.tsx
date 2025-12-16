@@ -166,21 +166,23 @@ export function LandingPage() {
               </Box>
               <Title
                 order={1}
-                size={{ base: 36, md: 56 }}
                 c="white"
                 fw={800}
                 ta="center"
-                style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.2)" }}
+                style={{ 
+                  textShadow: "2px 2px 4px rgba(0,0,0,0.2)",
+                  fontSize: "clamp(2rem, 5vw, 3.5rem)"
+                }}
               >
                 AI-Powered Emotion Detection
               </Title>
             </Group>
             <Text
-              size={{ base: "lg", md: "xl" }}
+              size="lg"
               c="white"
               ta="center"
               maw={800}
-              style={{ opacity: 0.95 }}
+              style={{ opacity: 0.95, fontSize: "clamp(1rem, 2vw, 1.25rem)" }}
             >
               Production-ready emotion detection API with state-of-the-art accuracy. 
               Powered by Vision Transformers and fine-tuned with Asripa for superior performance.
@@ -237,7 +239,7 @@ export function LandingPage() {
         <Container size="xl">
           <Stack gap="xl">
             <Box ta="center">
-              <Title order={2} size={{ base: 32, md: 42 }} mb="md">
+              <Title order={2} mb="md" style={{ fontSize: "clamp(1.75rem, 4vw, 2.625rem)" }}>
                 Why Choose Our Emotion Detection API?
               </Title>
               <Text size="lg" c="dimmed" maw={600} mx="auto">
@@ -270,7 +272,7 @@ export function LandingPage() {
         <Container size="xl" py={{ base: 60, md: 80 }}>
         <Stack gap="xl">
           <Box ta="center">
-            <Title order={2} size={{ base: 32, md: 42 }} mb="md">
+            <Title order={2} mb="md" style={{ fontSize: "clamp(1.75rem, 4vw, 2.625rem)" }}>
               Perfect For These Use Cases
             </Title>
             <Text size="lg" c="dimmed" maw={600} mx="auto">
@@ -311,7 +313,7 @@ export function LandingPage() {
       >
         <Container size="xl">
           <Stack gap="xl" align="center" ta="center">
-            <Title order={2} size={{ base: 32, md: 42 }} c="white">
+            <Title order={2} c="white" style={{ fontSize: "clamp(1.75rem, 4vw, 2.625rem)" }}>
               Ready to Get Started?
             </Title>
             <Text size="lg" c="white" maw={600} style={{ opacity: 0.95 }}>
