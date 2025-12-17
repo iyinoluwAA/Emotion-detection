@@ -1,0 +1,116 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Logs
+*.log
+logs/
+finetune_*.log
+torch_install.log
+pip_install.log
+
+# Data & Models (LARGE FILES - DO NOT COMMIT)
+data/
+models/
+*.h5
+*.keras
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.pb
+*.tar.gz
+*.zip
+**/checkpoint-*/
+checkpoint-*/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+predictions.db
+predictions_log.csv
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Secrets
+.env
+.env.*
+.kaggle/
+kaggle.json
+*.key
+*.pem
+
+# Node modules (frontend)
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# Python cache
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Archives and downloads
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Model files (explicitly ignore all model formats)
+cnn_model_*/
+*.h5
+*.keras
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# Hugging Face cache
+.cache/
+huggingface/
+
+# Test files
+test.py
+*.test
+
