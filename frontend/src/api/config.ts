@@ -5,7 +5,7 @@
 
 // Determine API URL based on environment
 // In development (localhost), use local backend
-// In production, use Render backend
+// In production, use Hugging Face Spaces backend
 const getBaseUrl = (): string => {
   // If VITE_API_URL is explicitly set, use it (but ensure it has https://)
   if (import.meta.env.VITE_API_URL) {
@@ -23,8 +23,9 @@ const getBaseUrl = (): string => {
     return "http://localhost:5000";
   }
   
-  // Production default: Render backend
-  return "https://emotion-detection-1-8avi.onrender.com";
+  // Production: Hugging Face Spaces uses format: https://username-spacename.hf.space
+  // For Docker Spaces, the API is accessible at the .hf.space domain
+  return "https://himaj-emotion-detection-api.hf.space";
 };
 
 export const API_CONFIG = {
@@ -62,4 +63,3 @@ export function getImageUrl(filename: string): string {
   }
   return `${API_CONFIG.baseUrl}/images/${filename}`;
 }
-

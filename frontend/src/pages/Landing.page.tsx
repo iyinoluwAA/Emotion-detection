@@ -36,7 +36,7 @@ const features = [
   {
     icon: IconBrain,
     title: "State-of-the-Art AI",
-    description: "Vision Transformer (ViT) model with Asripa fine-tuning. Trained on diverse datasets for superior accuracy.",
+    description: "Two powerful models available: Base Model (92.2% accuracy) for general use, and Asripa (fine-tuned on FER2013) for enhanced emotion detection. Asripa addresses occasional misclassifications in the base model, providing more reliable results.",
     color: "violet",
   },
   {
@@ -112,7 +112,7 @@ const useCases = [
 
 const stats = [
   { value: "92.2%", label: "Base Model Accuracy" },
-  { value: "78.26%", label: "Asripa Model (Fine-tuned)" },
+  { value: "⭐ Asripa", label: "Enhanced Emotion Detection" },
   { value: "8", label: "Emotions Detected" },
   { value: "<500ms", label: "Response Time" },
 ];
@@ -185,7 +185,7 @@ export function LandingPage() {
               style={{ opacity: 0.95, fontSize: "clamp(1rem, 2vw, 1.25rem)" }}
             >
               Production-ready emotion detection API with state-of-the-art accuracy. 
-              Powered by Vision Transformers and fine-tuned with Asripa for superior performance.
+              Choose between our Base Model (92.2% accuracy) or Asripa — our fine-tuned model that addresses occasional misclassifications for more reliable emotion detection.
             </Text>
             <Group gap="md" justify="center" wrap="wrap">
               <Button

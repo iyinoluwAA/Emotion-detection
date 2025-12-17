@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
-import { Button, Group, Card, Text, Box, Title, Stack, Badge, Image, Select } from "@mantine/core";
+import { Button, Group, Card, Text, Box, Title, Stack, Badge, Image, Select, Tooltip } from "@mantine/core";
 import { IconCamera, IconUpload, IconVideo, IconVideoOff } from "@tabler/icons-react";
 import { ButtonProgress, Status } from "@/components/Buttons/ButtonProgress";
 import { ButtonMenu } from "@/components/Buttons/ButtonMenu";
@@ -199,19 +199,29 @@ export function CameraSpace({ submitFile, onRefreshLogs, onClearLogs, disabled =
           Camera & Upload
         </Title>
         <Group gap="md" align="center">
-          <Select
-            label="Model"
-            placeholder="Select model"
-            value={selectedModel}
-            onChange={(value) => setSelectedModel((value as "base" | "fine-tuned") || "base")}
-            data={[
-              { value: "base", label: "Base Model" },
-              { value: "fine-tuned", label: "Asripa" },
-            ]}
-            size="sm"
-            style={{ minWidth: 200 }}
-            disabled={disabled || status === "loading"}
-          />
+          <Tooltip
+            label={selectedModel === "fine-tuned" 
+              ? "Asripa: Fine-tuned on FER2013 for enhanced emotion detection. Addresses occasional misclassifications in the base model." 
+              : "Base Model: High-accuracy (92.2%) but may occasionally misclassify some emotions. Asripa recommended for more reliable results."}
+            withArrow
+            position="bottom"
+            multiline
+            w={300}
+          >
+            <Select
+              label="Model"
+              placeholder="Select model"
+              value={selectedModel}
+              onChange={(value) => setSelectedModel((value as "base" | "fine-tuned") || "base")}
+              data={[
+                { value: "base", label: "Base Model (92.2%)" },
+                { value: "fine-tuned", label: "Asripa ⭐ (Recommended)" },
+              ]}
+              size="sm"
+              style={{ minWidth: 200 }}
+              disabled={disabled || status === "loading"}
+            />
+          </Tooltip>
           {streaming && (
             <Badge color="green" variant="light" leftSection={<IconVideo size={12} />} size="lg">
               Live
